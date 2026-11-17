@@ -18,6 +18,16 @@ def test_manipulated_callback_does_not_crash():
 
     message = MagicMock(spec=Message)
     message.answer = AsyncMock()
+    message.edit_text = AsyncMock()
+    message.edit_media = AsyncMock()
+    message.edit_caption = AsyncMock()
+    message.bot = SimpleNamespace(id=999)
+    message.edit_reply_markup = AsyncMock()
+    message.text = "Old panel"
+    message.photo = None
+    message.reply_markup = None
+    message.chat = SimpleNamespace(id=5544)
+    message.message_id = 50
     c = SimpleNamespace(
         from_user=SimpleNamespace(id=321),
         data="a:invalid:0:0:0",
@@ -26,7 +36,8 @@ def test_manipulated_callback_does_not_crash():
     )
     asyncio.run(callback(c, SimpleNamespace()))
     c.answer.assert_awaited_once()
-    message.answer.assert_awaited_once()
+    message.edit_text.assert_awaited_once()
+    message.answer.assert_not_awaited()
     assert Attempt.objects.count() == 0
 
 
@@ -64,6 +75,16 @@ def test_real_exam_services_through_aiogram_callbacks(teacher):
     transition(quiz, "published")
     message = MagicMock(spec=Message)
     message.answer = AsyncMock()
+    message.edit_text = AsyncMock()
+    message.edit_media = AsyncMock()
+    message.edit_caption = AsyncMock()
+    message.bot = SimpleNamespace(id=999)
+    message.edit_reply_markup = AsyncMock()
+    message.text = "Old panel"
+    message.photo = None
+    message.reply_markup = None
+    message.chat = SimpleNamespace(id=5544)
+    message.message_id = 50
     c = SimpleNamespace(
         from_user=SimpleNamespace(id=student.telegram_id),
         data=f"s:{quiz.pk}",
@@ -79,8 +100,7 @@ def test_real_exam_services_through_aiogram_callbacks(teacher):
     c.data = "f:" + attempt.id.hex
     asyncio.run(callback(c, state))
     assert any(
-        "Testni yakunlamoqchimisiz?" in str(call)
-        for call in message.answer.call_args_list
+        "TESTNI YAKUNLASH" in str(call) for call in message.edit_text.call_args_list
     )
     c.data = "yes:" + attempt.id.hex
     asyncio.run(callback(c, state))
@@ -107,6 +127,16 @@ def test_registration_private_code_and_real_image_service(teacher):
 
     message = MagicMock(spec=Message)
     message.answer = AsyncMock()
+    message.edit_text = AsyncMock()
+    message.edit_media = AsyncMock()
+    message.edit_caption = AsyncMock()
+    message.bot = SimpleNamespace(id=999)
+    message.edit_reply_markup = AsyncMock()
+    message.text = "Old panel"
+    message.photo = None
+    message.reply_markup = None
+    message.chat = SimpleNamespace(id=5544)
+    message.message_id = 50
     message.answer_photo = AsyncMock()
     message.from_user = SimpleNamespace(id=6199, username="optional_name")
     message.text = "O‘quvchi Sinovi"
@@ -143,7 +173,8 @@ def test_registration_private_code_and_real_image_service(teacher):
         message=message,
     )
     asyncio.run(callback(c, state))
-    message.answer_photo.assert_awaited_once()
-    call = message.answer_photo.call_args
-    assert "Rasmli savol" in call.kwargs["caption"]
-    assert call.args[0].filename == "savol.png"
+    message.edit_media.assert_awaited_once()
+    message.answer_photo.assert_not_awaited()
+    media = message.edit_media.call_args.kwargs["media"]
+    assert "Rasmli savol" in media.caption
+    assert media.media.filename == "savol.png"

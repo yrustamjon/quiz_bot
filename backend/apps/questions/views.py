@@ -1,3 +1,4 @@
+from django.db import transaction
 from django.http import FileResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -26,14 +27,18 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def perform_create(self, s):
         s.save(owner=self.request.user)
 
+    @transaction.atomic
     def perform_update(self, s):
+        s.instance = Question.objects.select_for_update().get(pk=s.instance.pk)
         if s.instance.quizquestion_set.exclude(quiz__status="draft").exists():
             raise ValidationError(
                 "Faol testdagi savolni o‘zgartirish mumkin emas. Nusxa yarating."
             )
         s.save()
 
+    @transaction.atomic
     def perform_destroy(self, obj):
+        obj = Question.objects.select_for_update().get(pk=obj.pk)
         if obj.quizquestion_set.exists():
             raise ValidationError("Savol testga biriktirilgan.")
         obj.delete()
@@ -49,6 +54,7 @@ class QuestionViewSet(viewsets.ModelViewSet):
             raise NotFound()
 
     @action(detail=True, methods=["post"])
+    @transaction.atomic
     def duplicate(self, request, pk=None):
         question = self.get_object()
         question.pk = None

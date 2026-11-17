@@ -269,3 +269,27 @@ def test_manual_release_rejects_draft_and_preserves_owner_scope(client, quiz, ot
     quiz.owner = other
     quiz.save()
     assert client.post(f"/api/quizzes/{quiz.pk}/release-results/").status_code == 404
+
+
+def test_finish_preview_counts_answers_and_reconciles_expiration(quiz, student):
+    from datetime import timedelta
+
+    from apps.attempts.services import preview_finish
+
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    a = start(student, quiz)
+    answer(a.pk, student.telegram_id, 0, 0, 0)
+    pending, total, saved = preview_finish(a.pk, student.telegram_id)
+    assert pending.status == "in_progress" and total == 2 and saved == 1
+    with pytest.raises(PermissionDenied):
+        preview_finish(a.pk, student.telegram_id + 1)
+    Attempt.objects.filter(pk=a.pk).update(
+        deadline=timezone.now() - timedelta(seconds=1)
+    )
+    expired, _, _ = preview_finish(a.pk, student.telegram_id)
+    assert (
+        expired.status == "timed_out"
+        and expired.correct == 1
+        and expired.unanswered == 1
+    )

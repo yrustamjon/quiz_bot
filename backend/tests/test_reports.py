@@ -154,3 +154,52 @@ def test_rankings_best_attempt_average_and_deterministic_ties(teacher):
     quizzes[1].save()
     visible = ranking(Attempt.objects.all(), student_visibility=True)
     assert all(row["quizzes"] == 1 for row in visible)
+
+
+@pytest.mark.parametrize("kind", ["results", "students", "leaderboard"])
+def test_real_scoped_workbook_escapes_formula_payloads(client, teacher, kind):
+    from datetime import timedelta
+
+    from apps.accounts.models import StudentProfile
+    from django.utils import timezone
+
+    teacher.full_name = "+SUM(1,2)"
+    teacher.save()
+    student = StudentProfile.objects.create(
+        telegram_id=72836, full_name='=HYPERLINK("https://example.test","x")'
+    )
+    quiz = Quiz.objects.create(
+        owner=teacher, title="@SUM(1,2)", subject="Fan", status="published"
+    )
+    now = timezone.now()
+    Attempt.objects.create(
+        quiz=quiz,
+        student=student,
+        number=1,
+        status="completed",
+        navigation="sequential",
+        started_at=now,
+        deadline=now + timedelta(minutes=10),
+        finished_at=now + timedelta(minutes=1),
+        earned=1,
+        maximum=2,
+        percentage=50,
+    )
+    response = client.post(
+        f"/api/reports/export/?quiz={quiz.pk}", {"report_type": kind}, format="json"
+    )
+    assert response.status_code == 200
+    workbook = load_workbook(io.BytesIO(response.content))
+    sheet = workbook.active
+    assert sheet.max_row == 2
+    row = list(sheet[2])
+    assert all(cell.data_type != "f" for cell in row)
+    student_cell = next(
+        cell
+        for cell in row
+        if isinstance(cell.value, str) and "HYPERLINK" in cell.value
+    )
+    assert student_cell.value.startswith("'=")
+    if kind == "results":
+        assert row[1].value == "'@SUM(1,2)"
+        assert row[2].value == "'+SUM(1,2)"

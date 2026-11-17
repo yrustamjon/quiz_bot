@@ -1,3 +1,4 @@
+import hashlib
 import re
 
 from apps.accounts.models import StudentProfile
@@ -7,14 +8,19 @@ from apps.attempts.scoring import percent_display
 from apps.attempts.services import access_quiz, released, student_result
 from apps.quizzes.models import Quiz, QuizAccessCode
 from apps.reports.services import ranking
+from django.core.cache import cache
 from django.core.files.storage import default_storage
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.utils import timezone
+from redis.exceptions import RedisError
 from rest_framework.exceptions import PermissionDenied, ValidationError
 
 
 def student(tid):
     return StudentProfile.objects.filter(telegram_id=tid, is_active=True).first()
+
+
+PUBLIC_PAGE_SIZE = 5
 
 
 def public_quizzes(page=0):
@@ -23,7 +29,9 @@ def public_quizzes(page=0):
         Quiz.objects.filter(status="published", access="public")
         .filter(Q(opens_at__isnull=True) | Q(opens_at__lte=now))
         .filter(Q(closes_at__isnull=True) | Q(closes_at__gt=now))
-        .order_by("id")[page * 8 : page * 8 + 9]
+        .order_by("id")[
+            page * PUBLIC_PAGE_SIZE : page * PUBLIC_PAGE_SIZE + PUBLIC_PAGE_SIZE + 1
+        ]
     )
 
 
@@ -58,7 +66,12 @@ def by_code(tid, code):
 
 
 def get_question(a):
-    return a.questions.filter(position=a.cursor).first()
+    return a.questions.select_related("answer").filter(position=a.cursor).first()
+
+
+def question_view(a):
+    counts = a.questions.aggregate(total=Count("id"), answered=Count("answer"))
+    return get_question(a), counts["total"], counts["answered"]
 
 
 def image_data(name):
@@ -71,6 +84,36 @@ def image_data(name):
         return None
 
 
+def photo_file_id(bot_id, name):
+    if not isinstance(bot_id, int) or not name:
+        return None
+    key = f"telegram-photo:{bot_id}:" + hashlib.sha256(name.encode()).hexdigest()
+    try:
+        return cache.get(key)
+    except (RedisError, OSError):
+        return None
+
+
+def forget_photo(bot_id, name):
+    if not isinstance(bot_id, int) or not name:
+        return
+    key = f"telegram-photo:{bot_id}:" + hashlib.sha256(name.encode()).hexdigest()
+    try:
+        cache.delete(key)
+    except (RedisError, OSError):
+        return
+
+
+def remember_photo(bot_id, name, file_id):
+    if not isinstance(bot_id, int) or not name:
+        return
+    key = f"telegram-photo:{bot_id}:" + hashlib.sha256(name.encode()).hexdigest()
+    try:
+        cache.set(key, file_id, timeout=86400)
+    except (RedisError, OSError):
+        return
+
+
 def own_results(tid):
     return [
         student_result(a, tid)
@@ -79,6 +122,18 @@ def own_results(tid):
         .select_related("quiz", "student")
         .order_by("-finished_at")[:10]
     ]
+
+
+def result_page(tid, page=0):
+    attempts = (
+        Attempt.objects.filter(student__telegram_id=tid)
+        .exclude(status="in_progress")
+        .select_related("quiz", "student")
+        .order_by("-finished_at", "-id")
+    )
+    total = attempts.count()
+    attempt = attempts[page : page + 1].first()
+    return (student_result(attempt, tid) if attempt else None), total
 
 
 def student_ranking(tid):

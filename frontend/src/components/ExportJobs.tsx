@@ -32,7 +32,7 @@ export function ExportJobs() {
       {q.isPending ? (
         <Loading />
       ) : q.error ? (
-        <ErrorState error={q.error} />
+        <ErrorState error={q.error} retry={() => q.refetch()} />
       ) : q.data.results.length ? (
         q.data.results.map((job) => (
           <div className="section-heading" key={job.id}>

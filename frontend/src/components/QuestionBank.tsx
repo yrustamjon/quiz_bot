@@ -105,7 +105,7 @@ export function QuestionBank({
       {bank.isPending ? (
         <Loading />
       ) : bank.error ? (
-        <ErrorState error={bank.error} />
+        <ErrorState error={bank.error} retry={() => bank.refetch()} />
       ) : (
         bank.data.results
           .filter(

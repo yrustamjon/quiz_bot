@@ -1,3 +1,4 @@
+import { NetworkStatus } from "../components/NetworkStatus";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -93,6 +94,7 @@ export default function Auth({ change = false }: { change?: boolean }) {
           </div>
         </section>
         <section className="auth-card">
+          <NetworkStatus />
           <span className="eyebrow">QUIZ BOT HISOBI</span>
           <h2>{change ? "Parolni almashtirish" : "Xush kelibsiz"}</h2>
           <p>

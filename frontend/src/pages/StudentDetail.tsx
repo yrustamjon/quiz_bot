@@ -1,4 +1,4 @@
-import {formatPercent} from "../services/labels";
+import { formatPercent } from "../services/labels";
 import type { Student } from "../services/types";
 import { statusLabel } from "../services/labels";
 import { useParams, Link } from "react-router-dom";
@@ -12,7 +12,7 @@ export default function StudentDetail() {
     queryFn: () => api<Student>("students/" + id + "/"),
   });
   if (q.isPending) return <Loading />;
-  if (q.error) return <ErrorState error={q.error} />;
+  if (q.error) return <ErrorState error={q.error} retry={() => q.refetch()} />;
   return (
     <>
       <div className="page-heading">

@@ -201,6 +201,21 @@ def navigate(attempt_id, telegram_id, position, revision):
 
 
 @transaction.atomic
+def preview_finish(attempt_id, telegram_id):
+    a = (
+        Attempt.objects.select_for_update()
+        .select_related("student", "quiz")
+        .get(pk=attempt_id)
+    )
+    check_owner(a, telegram_id)
+    reconcile_one(a)
+    from django.db.models import Count
+
+    counts = a.questions.aggregate(total=Count("id"), answered=Count("answer"))
+    return a, counts["total"], counts["answered"]
+
+
+@transaction.atomic
 def finish(attempt_id, telegram_id, confirmed=False):
     a = (
         Attempt.objects.select_for_update()

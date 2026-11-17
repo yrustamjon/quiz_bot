@@ -1,8 +1,10 @@
+import asyncio
 import logging
+import time
 import uuid
 
 from aiogram import Router
-from aiogram.exceptions import TelegramAPIError, TelegramBadRequest
+from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from apps.attempts import services as engine
@@ -13,7 +15,8 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import APIException
 
 from bot import services
-from bot.keyboards.exam import keyboard, menu
+from bot.keyboards.exam import back_menu, keyboard, menu
+from bot.ui import Panel, panel_lock
 
 from .presentation import continue_exam_proxy, intro, show_attempt, show_result
 from .registration import Registration
@@ -22,71 +25,131 @@ router = Router()
 db = sync_to_async
 
 
+async def acknowledge(c):
+    try:
+        await asyncio.wait_for(c.answer(), timeout=5)
+    except (TelegramAPIError, TimeoutError):
+        logging.getLogger(__name__).info("Telegram acknowledgement unavailable")
+
+
 @router.callback_query()
 async def callback(c: CallbackQuery, state: FSMContext):
+    # Acknowledge the tap while SQL/rendering runs, instead of serializing two
+    # network roundtrips before the student sees the next screen.
+    started = time.monotonic()
+    ack = asyncio.create_task(acknowledge(c))
     try:
-        await c.answer()
-    except TelegramBadRequest:
-        logging.getLogger(__name__).info("Stale Telegram acknowledgement")
-    if not isinstance(c.message, Message):
-        await c.bot.send_message(
-            c.from_user.id, "Xabar mavjud emas. /continue orqali davom eting."
+        if not isinstance(c.message, Message):
+            await c.bot.send_message(
+                c.from_user.id, "Xabar mavjud emas. /continue orqali davom eting."
+            )
+            return
+        lock = panel_lock(c.message)
+        async with lock:
+            await handle_callback(c, state, Panel(c.message, lock=lock))
+    finally:
+        rendered = time.monotonic()
+        await ack
+        action = (c.data or "").split(":", 1)[0]
+        kind = (
+            action
+            if action
+            in {
+                "menu",
+                "code",
+                "profile",
+                "results",
+                "quizrank",
+                "ranking",
+                "list",
+                "q",
+                "s",
+                "a",
+                "n",
+                "f",
+                "yes",
+                "resume",
+            }
+            else "unknown"
         )
-        return
+        logging.getLogger(__name__).info(
+            "Bot interaction kind=%s render_ms=%d total_ms=%d",
+            kind,
+            round((rendered - started) * 1000),
+            round((time.monotonic() - started) * 1000),
+        )
+
+
+async def handle_callback(c, state, message):
     tid = c.from_user.id
     data = c.data or ""
     parts = data.split(":")
     try:
         s = await db(services.student)(tid)
         if not s:
-            await c.message.answer("Avval /start orqali ro‘yxatdan o‘ting.")
+            await message.answer("Avval /start orqali ro‘yxatdan o‘ting.")
             return
         if data == "resume":
-            await continue_exam_proxy(c.message, tid)
+            await continue_exam_proxy(message, tid)
             return
         if data == "menu":
             await state.clear()
-            await c.message.answer("Bosh menyu", reply_markup=menu())
+            await message.answer(
+                "QUIZ BOT\n\nTest tanlang yoki boshlangan imtihonni davom ettiring.",
+                reply_markup=menu(),
+            )
             return
         if data == "code":
             await state.set_state(Registration.code)
-            await c.message.answer("Test kodini kiriting.")
+            await message.answer(
+                "🔑 TEST KODI\n\nO‘qituvchingiz bergan 10 belgili kodni yuboring.\nMasalan: AB12CD34EF",
+                reply_markup=back_menu(),
+            )
             return
         if data == "profile":
-            await c.message.answer(s.full_name, reply_markup=menu())
+            await message.answer(
+                "👤 PROFIL\n\n" + s.full_name, reply_markup=back_menu()
+            )
             return
-        if data == "results":
-            results = await db(services.own_results)(tid)
-            for r in results:
-                if not r.get("released"):
-                    await c.message.answer(
-                        "Natijangiz saqlandi. Natijalar keyinroq e’lon qilinadi."
-                    )
-                    continue
-                labels = {
-                    "title": "Test",
-                    "earned": "Ball",
-                    "maximum": "Maksimum",
-                    "percentage": "Natija (%)",
-                    "correct": "To‘g‘ri",
-                    "incorrect": "Noto‘g‘ri",
-                    "unanswered": "Javobsiz",
-                    "rank": "Reyting (o‘zgarishi mumkin)",
-                }
-                await c.message.answer(
-                    "\n".join(
-                        f"{label}: {percent_display(r[key]) if key == 'percentage' else r[key]}"
-                        for key, label in labels.items()
-                        if key in r
-                    )[:3800]
+        if parts[0] == "results":
+            page = max(0, min(10000, int(parts[1]) if len(parts) > 1 else 0))
+            result, total = await db(services.result_page)(tid, page)
+            rows = []
+            navigation = []
+            if page:
+                navigation.append(("← Oldingi", f"results:{page - 1}"))
+            if page + 1 < total:
+                navigation.append(("Keyingi →", f"results:{page + 1}"))
+            if navigation:
+                rows.append(navigation)
+            rows.append([("‹ Bosh menyu", "menu")])
+            if result is None:
+                text = "📊 NATIJALARIM\n\nHali yakunlangan test yo‘q. Testni tugatganingizdan keyin natija shu yerda ko‘rinadi."
+            elif not result.get("released"):
+                text = f"📊 NATIJALARIM · {page + 1}/{total}\n\nNatija saqlandi. O‘qituvchi e’lon qilgach shu yerda ochiladi."
+            else:
+                text = (
+                    f"📊 NATIJALARIM · {page + 1}/{total}\n\n"
+                    + result["title"]
+                    + "\n\n"
                 )
-            if not results:
-                await c.message.answer("Hozircha natijalar yo‘q.")
+                for key, label in [
+                    ("earned", "Ball"),
+                    ("maximum", "Maksimum"),
+                    ("percentage", "Natija (%)"),
+                    ("correct", "To‘g‘ri"),
+                    ("incorrect", "Noto‘g‘ri"),
+                    ("unanswered", "Javobsiz"),
+                    ("rank", "Reyting"),
+                ]:
+                    if key in result:
+                        text += f"{label}: {percent_display(result[key]) if key == 'percentage' else result[key]}\n"
+            await message.answer(text[:3800], reply_markup=keyboard(rows))
             return
         if parts[0] == "quizrank":
             result = await db(services.quiz_ranking)(tid, int(parts[1]))
             if result is None:
-                await c.message.answer("Reytingga kirish huquqi yo‘q.")
+                await message.answer("Reytingga kirish huquqi yo‘q.")
                 return
             rows, own = result
             text = (
@@ -98,80 +161,87 @@ async def callback(c: CallbackQuery, state: FSMContext):
                 )
                 + f"\nSizning o‘rningiz: {own or '—'}"
             )
-            await c.message.answer(text, reply_markup=menu())
+            await message.answer(text, reply_markup=back_menu())
             return
         if data == "ranking":
             rows, own = await db(services.student_ranking)(tid)
-            await c.message.answer(
-                "Reyting (o‘zgarishi mumkin):\n"
+            await message.answer(
+                "🏆 REYTING\n\n"
                 + "\n".join(
                     f"{x['rank']}. {x['name']} — {x['percentage']}%" for x in rows
                 )
-                + f"\nSizning o‘rningiz: {own or '—'}",
-                reply_markup=menu(),
+                + (
+                    f"\n\nSizning o‘rningiz: {own or '—'}\nReyting yangi natijalar bilan yangilanadi."
+                    if rows
+                    else "Hali yakunlangan natijalar yo‘q.\nTestni tugatgach reytingda qatnashasiz."
+                ),
+                reply_markup=back_menu(),
             )
             return
         if parts[0] == "list":
-            page = int(parts[1])
-            page = max(0, min(10000, page))
+            page = max(0, min(10000, int(parts[1])))
             quizzes = await db(services.public_quizzes)(page)
-            rows = [
-                [
-                    (
-                        f"{q.title[:30]} · {q.question_count} savol · {q.duration_minutes} daq · {q.max_attempts} urinish",
-                        f"q:{q.pk}",
-                    )
-                ]
-                for q in quizzes[:8]
-            ]
-            if len(quizzes) > 8:
-                rows.append([("Keyingi", f"list:{page + 1}")])
+            visible = quizzes[: services.PUBLIC_PAGE_SIZE]
+            text = f"📝 OCHIQ TESTLAR\n{page + 1}-sahifa · Test raqamini tanlang\n"
+            for index, quiz in enumerate(visible, 1):
+                text += f"\n{index}. {quiz.title}\n    {quiz.question_count} savol · {quiz.duration_minutes} daq · {quiz.max_attempts} urinish\n"
+            rows = []
+            if visible:
+                rows.append(
+                    [(str(i), f"q:{quiz.pk}") for i, quiz in enumerate(visible, 1)]
+                )
+            else:
+                text = "📝 OCHIQ TESTLAR\n\nHozircha ochiq test yo‘q. O‘qituvchingiz kod bergan bo‘lsa, Test kodi bo‘limidan foydalaning."
+            navigation = []
             if page:
-                rows.append([("Oldingi", f"list:{page - 1}")])
-            rows.append([("Bosh menyu", "menu")])
-            await c.message.answer(
-                "Ochiq testlar" if quizzes else "Hozircha ochiq test yo‘q.",
-                reply_markup=keyboard(rows),
-            )
+                navigation.append(("← Oldingi", f"list:{page - 1}"))
+            if len(quizzes) > services.PUBLIC_PAGE_SIZE:
+                navigation.append(("Keyingi →", f"list:{page + 1}"))
+            if navigation:
+                rows.append(navigation)
+            rows.append([("🔑 Test kodi", "code"), ("‹ Bosh menyu", "menu")])
+            await message.answer(text, reply_markup=keyboard(rows))
             return
         if parts[0] in ["q", "s"]:
             q = await db(Quiz.objects.get)(pk=int(parts[1]))
             cached = (await state.get_data()).get("code")
             await db(engine.access_quiz)(s, q, cached)
             if parts[0] == "q":
-                await intro(c.message, q)
+                await intro(message, q)
                 return
             a = await db(engine.start)(s, q, cached)
-            await show_attempt(c.message, a, tid)
+            await show_attempt(message, a, tid)
             return
         aid = uuid.UUID(hex=parts[1])
         if parts[0] == "a":
             a, _ = await db(engine.answer)(
                 aid, tid, int(parts[2]), int(parts[3]), int(parts[4])
             )
-            await show_attempt(c.message, a, tid)
+            await show_attempt(message, a, tid)
         elif parts[0] == "n":
             a = await db(engine.navigate)(aid, tid, int(parts[2]), int(parts[3]))
-            await show_attempt(c.message, a, tid)
+            await show_attempt(message, a, tid)
         elif parts[0] == "f":
-            from apps.attempts.models import Attempt
-
-            a = await db(Attempt.objects.select_related("student").get)(pk=aid)
-            await db(engine.check_owner)(a, tid)
-            await c.message.answer(
-                "Testni yakunlamoqchimisiz? Javob berilmagan savollar uchun 0 ball beriladi. Yakunlangandan keyin testga qayta olmaysiz.",
+            a, total, answered = await db(engine.preview_finish)(aid, tid)
+            if a.status != "in_progress":
+                await show_result(message, a, tid)
+                return
+            await message.answer(
+                f"TESTNI YAKUNLASH\n\n{answered}/{total} javob saqlangan.\n{total - answered} ta savol javobsiz — ularga 0 ball.\n\nYakunlangandan keyin javoblar o‘zgarmaydi.\nDavom etasizmi yoki yakunlaysizmi?",
                 reply_markup=keyboard(
                     [
-                        [("Ha, yakunlash", "yes:" + aid.hex)],
-                        [("Yo‘q, davom etish", "resume")],
+                        [
+                            ("← Davom etish", "resume", "primary"),
+                            ("Ha, yakunlash", "yes:" + aid.hex, "danger"),
+                        ]
                     ]
                 ),
             )
         elif parts[0] == "yes":
             a = await db(engine.finish)(aid, tid, True)
-            await show_result(c.message, a, tid)
+            await show_result(message, a, tid)
     except (APIException, ObjectDoesNotExist, ValueError, IndexError):
-        await c.message.answer(
+        await message.answer(
             "Amal eskirgan, muddat tugagan yoki ruxsat yo‘q. /continue orqali davom eting."
         )
 

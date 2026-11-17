@@ -10,6 +10,7 @@ from rest_framework.exceptions import APIException
 
 from bot import services
 from bot.keyboards.exam import menu
+from bot.ui import text_entities
 
 from .presentation import intro, show_attempt
 
@@ -30,9 +31,12 @@ async def start(message: Message, state: FSMContext):
         await message.answer("Xush kelibsiz! Ism va familiyangizni kiriting.")
         return
     await state.clear()
-    await message.answer(
-        "Quiz Bot — test tanlang. Vaqt test davomida to‘xtamaydi.", reply_markup=menu()
+    text = (
+        "QUIZ BOT\n\nSalom, "
+        + s.full_name.split()[0]
+        + ".\nTest tanlang yoki boshlangan imtihonni davom ettiring."
     )
+    await message.answer(text, reply_markup=menu(), entities=text_entities(text))
 
 
 @router.message(Command("continue"))
@@ -63,7 +67,8 @@ async def name(message: Message, state: FSMContext):
         await message.answer("Ism va familiyani 3–150 belgi bilan kiriting.")
         return
     await state.clear()
-    await message.answer("Ro‘yxatdan o‘tdingiz.", reply_markup=menu())
+    text = "QUIZ BOT\n\nRo‘yxatdan o‘tdingiz. Quyidagi bo‘limlardan birini tanlang."
+    await message.answer(text, reply_markup=menu(), entities=text_entities(text))
 
 
 @router.message(Registration.code, F.text)

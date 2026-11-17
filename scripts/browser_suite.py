@@ -23,6 +23,7 @@ BROWSER_SCRIPTS = [
     "browser-check.mjs",
     "panel-check.mjs",
     "integration-check.mjs",
+    "security-check.mjs",
     "management-check.mjs",
     "accessibility-check.mjs",
 ]
@@ -164,6 +165,7 @@ def main():
                     time.sleep(0.2)
                 else:
                     raise RuntimeError("Isolated Celery worker readiness timed out.")
+                run([sys.executable, "scripts/check_worker.py"])
                 for script in args.scripts:
                     run(["node", str(ROOT / "frontend" / script)])
         finally:

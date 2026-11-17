@@ -51,6 +51,10 @@ jobs:
         if: always()
         working-directory: frontend
         run: npm audit
+      - name: Adversarial glob security regression
+        if: always()
+        working-directory: frontend
+        run: npm run test:security
       - name: Upload synthetic test artifacts
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

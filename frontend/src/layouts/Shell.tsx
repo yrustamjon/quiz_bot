@@ -1,3 +1,4 @@
+import { NetworkStatus } from "../components/NetworkStatus";
 import { AccountMenu } from "../components/AccountMenu";
 import { useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation } from "react-router-dom";
@@ -28,7 +29,13 @@ export default function Shell() {
   const [loggingOut, setLoggingOut] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  if (loading) return <Loading />;
+  if (loading)
+    return (
+      <>
+        <NetworkStatus />
+        <Loading />
+      </>
+    );
   if (!user) return <Navigate to="/login" />;
   if (!["SUPER_ADMIN", "TEACHER"].includes(user.role))
     return (
@@ -147,6 +154,7 @@ export default function Shell() {
           </div>
         </header>
         <main id="main">
+          <NetworkStatus />
           {error && (
             <p className="notice error" role="alert">
               {error}

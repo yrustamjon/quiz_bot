@@ -80,7 +80,7 @@ export default function Groups() {
         {q.isPending ? (
           <Loading />
         ) : q.error ? (
-          <ErrorState error={q.error} />
+          <ErrorState error={q.error} retry={() => q.refetch()} />
         ) : q.data.results.length ? (
           q.data.results.map((g) => (
             <div className="section-heading" key={g.id}>
@@ -198,7 +198,10 @@ export default function Groups() {
           {students.isPending ? (
             <Loading />
           ) : students.error ? (
-            <ErrorState error={students.error} />
+            <ErrorState
+              error={students.error}
+              retry={() => students.refetch()}
+            />
           ) : (
             students.data.results.map((s) => (
               <label

@@ -38,7 +38,7 @@ export default function QuizDetail() {
     queryFn: () => api<Question[]>("quizzes/" + id + "/questions/"),
   });
   if (q.isPending) return <Loading />;
-  if (q.error) return <ErrorState error={q.error} />;
+  if (q.error) return <ErrorState error={q.error} retry={() => q.refetch()} />;
   const quiz = q.data!;
   async function action(path: string) {
     setBusy(true);
@@ -205,7 +205,10 @@ export default function QuizDetail() {
               {questions.isPending ? (
                 <Loading />
               ) : questions.error ? (
-                <ErrorState error={questions.error} />
+                <ErrorState
+                  error={questions.error}
+                  retry={() => questions.refetch()}
+                />
               ) : questions.data?.length ? (
                 questions.data.map((x, i) => (
                   <p key={x.id}>

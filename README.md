@@ -124,6 +124,8 @@ Open the Vite URL printed by the command. Default port is 5173; `/api` proxies t
 
 Temporary credentials expire after 24 hours. Super Admin can issue a replacement, or activate/deactivate the account. Passwords are Django-hashed; no plaintext password is retrievable after issuance. Password changes invalidate the old credential and rotate session authentication. Disabled accounts lose authenticated API access.
 
+JSON mutation bodies must be objects; malformed top-level arrays/null/scalars return Uzbek HTTP 400 errors. Nested option/ID arrays and multipart uploads remain supported.
+
 Browser authentication uses Django sessions and CSRF. The client bootstraps CSRF, includes it on mutations, clears other users' caches on logout and rechecks invalid sessions. No session secrets or passwords are placed in localStorage. Only theme preference is stored there. Authentication/code throttles use transactionally incremented, hashed SQL buckets, so a Redis outage cannot bypass them.
 
 ## Quiz and question workflow
@@ -160,6 +162,24 @@ At start, SQL freezes the question text, scoring, answer mapping and order. Sequ
 The deadline is `min(start + duration, configured closing time)`. It never pauses when Telegram, Redis or the bot restarts. `/continue` rebuilds state from SQL. Each answer/finish checks server time, independent of Celery timing. Beat reconciles missed expirations every 30 seconds. Early finish requires an explicit confirmation. Answered questions earn their configured points; incorrect and unanswered answers separately earn zero. Completion is idempotent.
 
 Points use Decimal. Percentages are stored to six decimal places for ranking; displays round appropriately. Result fields are gated on the backend. Defaults show score/percentage/correct/incorrect counts and rank; detailed answer review is off. Release may be immediate, after quiz closure or manual. Hidden percentages cannot leak through Telegram overall rankings.
+
+### Compact Telegram interface and local updates
+
+The home menu keeps all six actions in three rows. Public quizzes show five entries with short number buttons; Previous/Next edits the same bot message. Results are paginated one at a time. Questions show saved-answer progress and mark the student's selected option without revealing correctness. Start/selected/finish controls use native button styles supported by the installed SDK.
+
+Callback acknowledgements run concurrently with SQL/rendering. A short-lived per-panel lock coalesces duplicate taps using the latest Telegram message; unchanged screens avoid redundant edits. Missing/old messages fall back to one new panel. Photo-to-text changes preserve chat history; Telegram's caption/message limits can require a separate text continuation. No message is edited every second.
+
+Question photos reuse bot-scoped Telegram file IDs from the private Redis cache (one-day TTL); a rejected cached ID is evicted and the original safe raster is reuploaded. The same photo needs only caption/control updates. Logs report action kind, render_ms and total_ms, never message payloads, codes or tokens.
+
+For an existing **local** checkout, stop its current bot with Ctrl+C first, then:
+
+```sh
+git pull --ff-only origin main
+source .venv/bin/activate
+python -m bot.main
+```
+
+Keep the existing .env/database/media. A fast-forward failure needs inspection; do not reset local changes. Changes in a cloud checkout cannot reload an already-running bot on your Mac. Only one long-polling process should use a given bot token.
 
 ## Results, rankings and reporting
 
@@ -204,15 +224,16 @@ npm run lint
 npm run build
 cd ..
 python scripts/browser_suite.py
+python scripts/check_worker.py
 ```
 
 The browser suite starts separate Django/Vite ports and a dedicated native Celery worker/queue with a disposable SQLite database, media and random test credentials. It exercises actual API-backed web workflows and exports. Fixtures are explicit and opt-in; none are added during normal app startup. Test identities are deleted with the temporary directory. Screenshots/reports default to a sibling `artifacts/e2e` directory; `QUIZ_ARTIFACT_DIR` overrides it.
 
-Install Chromium or set CHROMIUM_PATH to its binary (on macOS it can be `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). The suite checks light/dark, widths 360/390/768/1024/1280/1440/1920, keyboard dialogs, and axe WCAG checks. Use `--scripts management-check.mjs` to rerun a specific workflow in a fresh environment. No passing compile is represented as functional validation. Explicit API/Bot API mocks occur only in unit tests, never in production pages.
+Install Chromium or set CHROMIUM_PATH to its binary (on macOS it can be `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`). It also checks stored XSS escaping and actual offline/reconnect, transport failure/retry, empty/loading states without fabricated API responses. The suite checks light/dark, widths 360/390/768/1024/1280/1440/1920, keyboard dialogs, and axe WCAG checks. Use `--scripts management-check.mjs` to rerun a specific workflow in a fresh environment. No passing compile is represented as functional validation. Explicit API/Bot API mocks occur only in unit tests, never in production pages.
 
 Backend tests include account onboarding/CSRF, ownership, quiz lifecycle, shuffled snapshots, sequential/free answers, exact deadline, resume, duplicate finalization, simultaneous start/answer/finish using file-backed SQLite, imports/images/hostile archives, formula injection, report download ownership and Aiogram callback-to-real-domain-service flow. A live human Telegram run is a separate outstanding check.
 
-Dependency audits are in the progress record. Full npm audit currently fails on GHSA-fc5q-39xc-vjpf (picomatch <=4.0.7; registry latest 4.0.7), affecting build/test tooling dependency chains. The production npm audit is clean. CI retains the full audit as a blocking gate; do not suppress it. Earlier DRF/Pillow advisories were resolved by upgrades and a clean re-audit; repeat audits before production deployment. TypeScript is strict; explicit any is prohibited and ESLint must report zero warnings.
+Dependency audits are in the progress record. Full npm audit currently fails on GHSA-fc5q-39xc-vjpf (picomatch <=4.0.7; registry latest 4.0.7), affecting build/test tooling dependency chains. The production npm audit is clean. `npm run test:security` runs bounded child-process regressions for the advisory; it currently fails on three malicious patterns and remains a CI gate. The referenced upstream PR was tested in isolation and still fails those cases, so it was not applied. CI retains the full audit as a blocking gate; do not suppress it. Earlier DRF/Pillow advisories were resolved by upgrades and a clean re-audit; repeat audits before production deployment. TypeScript is strict; explicit any is prohibited and ESLint must report zero warnings.
 
 ## Deployment, concurrency and backups
 
@@ -245,7 +266,7 @@ Restore only with services stopped; preserve current data, restore the database 
 - Expired temporary password: Super Admin issues a new one-time credential.
 - Redis unavailable: start native Redis and retry; examination state/deadlines remain in SQL. A missing Redis connection prevents bot startup.
 - Telegram access denied: verify secure token binding and allowed api.telegram.org destination; do not paste tokens in chat or disable TLS verification.
-- Unknown Celery task after code changes: restart the worker; installed files do not reload an existing process.
+- Unknown Celery task or stale source after code changes: gracefully stop the old worker, wait for it to exit, start it with stdout/stderr attached to durable logs, then run `python scripts/check_worker.py`. It verifies an actual task roundtrip against a source fingerprint captured at worker startup; an alive PID alone is insufficient. Never remove an active worker's PID file to start a second worker.
 - Database locked: reduce write concurrency or migrate to PostgreSQL; do not remove constraints or reset user data.
 - Import failure: follow row-specific errors, template version and image-anchor rules, then upload a corrected file. No partial import is silently accepted.
 - Browser-suite failure: inspect saved artifacts, fix the real failure and rerun; it never uses the live database.

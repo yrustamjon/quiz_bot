@@ -1,3 +1,4 @@
+import { Button } from "./ui/button";
 import { AlertCircle, Inbox } from "lucide-react";
 export function Loading() {
   return (
@@ -21,7 +22,11 @@ export function ErrorState({
       <div>
         <strong>Ma’lumotni yuklab bo‘lmadi</strong>
         <p>{error.message}</p>
-        {retry && <button onClick={retry}>Qayta urinish</button>}
+        {retry && (
+          <Button variant="outline" onClick={retry}>
+            Qayta urinish
+          </Button>
+        )}
       </div>
     </div>
   );

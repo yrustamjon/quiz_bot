@@ -1,6 +1,6 @@
 # Quiz Bot — amalga oshirish va tekshiruv hisoboti
 
-2026-11-17. Source checkpoint `308bec7` main branchga muvaffaqiyatli push qilindi. 18 ta screenshot Telegram orqali yuborilgani tasdiqlandi.
+2026-11-18 (Asia/Tashkent). Oldingi main checkpoint: `69d4e65`. Joriy Telegram UX, runtime va input-hardening tuzatishlari yakuniy pushga tayyorlanmoqda. 22 ta screenshot Telegram orqali yuborilgani tasdiqlandi.
 
 Asos: [MASTER_PROMPT](MASTER_PROMPT.md) va [FRONTEND_MASTER_PROMPT](FRONTEND_MASTER_PROMPT.md). Qayta davom ettirish holati: [IMPLEMENTATION_PROGRESS](../IMPLEMENTATION_PROGRESS.md).
 
@@ -36,7 +36,13 @@ Ro‘yxatdan o‘tish, ochiq/yopiq testlar, kodni tekshirish, imtihon boshlash, 
 
 Haqiqiy Telegram API ulanishi, polling va screenshot yuborish tekshirildi. Bot handler testlari haqiqiy SQL servislarini, test Telegram transportini ishlatadi. **Haqiqiy odam Telegramda ro‘yxatdan o‘tib imtihonni tugatgani hali tasdiqlanmagan.** Bot tokeni yoki chat identifikatori bu hisobotda yo‘q.
 
+Telegram UX yangilandi: 3 qatorli menyu, 5 tadan test, bitta xabar ichida sahifalash, bir natijali tarix, savol/javob progressi va native rangli boshqaruvlar. Bir xil tez bosishlar takroriy edit yubormaydi. Rasm file-ID orqali qayta ishlatiladi, eski ID rad etilsa asl rasm qayta yuklanadi. Eski/o‘chirilgan xabarda xavfsiz fallback bor. API cheklovi sabab juda uzun yoki photo-to-text holatlarida alohida davomiy xabar kerak bo‘lishi mumkin.
+
+Foydalanuvchi rasmlar lokal muhitdan ekanini aniqlashtirdi. Yangi kod lokalda pull/restart qilingach ko‘rinadi; lokal real javob tezligi hali o‘lchanmagan. @QuizBot ichki suhbat ekranlari bu muhitda tekshirilmagan.
+
 ## G. Xavfsizlik
+
+Noto‘g‘ri top-level JSON (array/null/scalar) 500 o‘rniga 400 bilan rad etiladi. SQL savol tahriri/nashr va resume/expiration race sinovlari o‘tdi. Ishlayotgan worker joriy kodni yuklagani startup fingerprint va real task roundtrip orqali tekshiriladi.
 
 CSRF, role/object ownership, vaqtinchalik parol muddati va qayta ishlatish cheklovi, Django parol hashlash, SQL throttling, private media va export, server muddati, stale/manipulated callback, Decimal hisoblash, formula-safe XLSX ishlatiladi.
 
@@ -46,12 +52,12 @@ DRF/Pillow audit topilmalari yangilash orqali bartaraf etildi. Pinned Python loc
 
 ## H. Tekshiruv va acceptance xaritasi
 
-- Backend: **58 pytest passed**; concurrency, ruxsat, autentifikatsiya, parser/raster, muddat, callback, reyting va hisobot tekshiruvlari bilan.
+- Backend: **77 pytest passed**; concurrency, ruxsat, autentifikatsiya, parser/raster, muddat, callback, reyting va hisobot tekshiruvlari bilan.
 - Frontend: **15 Vitest passed**; strict TypeScript build va ESLint zero warnings.
 - Django `check`, `check --deploy`, `makemigrations --check --dry-run`: muammosiz. `pip check`: muammosiz.
 - Haqiqiy Redis FSM write/reconnect/read/cleanup: o‘tdi; faqat ajratilgan kalitlar ishlatilgan.
 - Alohida Celery worker + ajratilgan SQL/media bilan background XLSX navbati, tayyor statusi va authenticated download brauzerda tekshirildi.
-- Eng oxirgi yakunlangan kengaytirilgan axe tekshiruvi: **42 sahifa/oyna/mavzu kombinatsiyasi, 0 violation**. Oxirgi router/form o‘zgarishidan keyingi integration/management/axe rerunlari ham o‘tdi.
+- Eng oxirgi yakunlangan kengaytirilgan axe tekshiruvi: **50 sahifa/oyna/holat/mavzu kombinatsiyasi, 0 violation**. Oxirgi router/form o‘zgarishidan keyingi integration/management/axe rerunlari ham o‘tdi.
 
 | Ssenariy | Dalil va holat |
 |---|---|

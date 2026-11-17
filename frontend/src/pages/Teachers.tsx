@@ -111,7 +111,7 @@ export default function Teachers() {
         {q.isPending ? (
           <Loading />
         ) : q.error ? (
-          <ErrorState error={q.error} />
+          <ErrorState error={q.error} retry={() => q.refetch()} />
         ) : q.data.results.length ? (
           <div className="table-wrap">
             <table>
