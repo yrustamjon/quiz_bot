@@ -19,14 +19,38 @@ const schema = z.object({
   password: z.string().min(1, "Parolni kiriting."),
 });
 export default function Auth({ change = false }: { change?: boolean }) {
-  const { user, refresh } = useAuth();
+  const { user, refresh, loading } = useAuth();
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
+  const formSchema = schema
+    .extend({ new_password: z.string(), confirm_password: z.string() })
+    .superRefine((data, ctx) => {
+      if (change) {
+        if (data.new_password.length < 8)
+          ctx.addIssue({
+            code: "custom",
+            path: ["new_password"],
+            message: "Kamida 8 belgili parol kiriting.",
+          });
+        if (data.new_password !== data.confirm_password)
+          ctx.addIssue({
+            code: "custom",
+            path: ["confirm_password"],
+            message: "Parollar mos emas.",
+          });
+      }
+    });
   const form = useForm({
-    resolver: zodResolver(schema),
-    defaultValues: { username: change ? "password-change" : "", password: "" },
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      username: change ? "password-change" : "",
+      password: "",
+      new_password: "",
+      confirm_password: "",
+    },
   });
+  if (change && !loading && !user) return <Navigate to="/login" />;
   if (!change && user)
     return (
       <Navigate to={user.must_change_password ? "/change-password" : "/"} />
@@ -81,12 +105,10 @@ export default function Auth({ change = false }: { change?: boolean }) {
               setError("");
               try {
                 if (change) {
-                  const f = document.querySelector<HTMLFormElement>("form")!;
-                  const d = new FormData(f);
                   await post("auth/change-password/", {
                     old_password: v.password,
-                    new_password: d.get("new_password"),
-                    confirm_password: d.get("confirm_password"),
+                    new_password: v.new_password,
+                    confirm_password: v.confirm_password,
                   });
                 } else await post("auth/login/", v);
                 await refresh();
@@ -138,21 +160,29 @@ export default function Auth({ change = false }: { change?: boolean }) {
                 <label>
                   Yangi parol
                   <input
-                    name="new_password"
+                    {...form.register("new_password")}
+                    aria-label="Yangi parol"
                     type="password"
                     autoComplete="new-password"
                     minLength={8}
                     required
                   />
+                  <small role="alert">
+                    {form.formState.errors.new_password?.message}
+                  </small>
                 </label>
                 <label>
                   Yangi parolni tasdiqlang
                   <input
-                    name="confirm_password"
+                    {...form.register("confirm_password")}
+                    aria-label="Yangi parolni tasdiqlang"
                     type="password"
                     autoComplete="new-password"
                     required
                   />
+                  <small role="alert">
+                    {form.formState.errors.confirm_password?.message}
+                  </small>
                 </label>
                 <p className="hint">
                   Kamida 8 belgi. Oddiy yoki faqat raqamlardan iborat parol

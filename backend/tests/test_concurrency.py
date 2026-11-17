@@ -60,3 +60,56 @@ def test_concurrent_start_answer_finish():
     with ThreadPoolExecutor(max_workers=2) as pool:
         percentages = list(pool.map(run_finish, range(2)))
     assert percentages == [100, 100]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_finish_races_with_timeout_reconciliation():
+    from datetime import timedelta
+
+    from apps.attempts.models import Attempt
+    from apps.attempts.tasks import reconcile
+    from django.utils import timezone
+
+    teacher = User.objects.create_user(username="timeout-owner", role="TEACHER")
+    student = StudentProfile.objects.create(telegram_id=7137, full_name="Timeout Race")
+    quiz = Quiz.objects.create(
+        owner=teacher, title="Timeout", subject="Fan", question_count=1
+    )
+    question = Question.objects.create(
+        owner=teacher, text="One", options=["1", "2", "3", "4"], correct_option=0
+    )
+    QuizQuestion.objects.create(quiz=quiz, question=question, position=0)
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    attempt = start(student, quiz)
+    attempt, _ = answer(attempt.pk, student.telegram_id, 0, 0, 0)
+    Attempt.objects.filter(pk=attempt.pk).update(
+        deadline=timezone.now() - timedelta(seconds=1)
+    )
+
+    def complete():
+        close_old_connections()
+        try:
+            return finish(attempt.pk, student.telegram_id, True).percentage
+        finally:
+            close_old_connections()
+
+    def expire():
+        close_old_connections()
+        try:
+            return reconcile()
+        finally:
+            close_old_connections()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f = pool.submit(complete)
+        t = pool.submit(expire)
+        assert f.result() == 100
+        t.result()
+    attempt.refresh_from_db()
+    assert (
+        attempt.status == "timed_out"
+        and attempt.correct == 1
+        and attempt.unanswered == 0
+    )
+    assert reconcile() == 0

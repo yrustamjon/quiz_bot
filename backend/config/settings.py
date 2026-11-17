@@ -24,6 +24,8 @@ INSTALLED_APPS = [
 ] + ["apps." + x for x in ["accounts", "quizzes", "questions", "attempts", "reports"]]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "config.uploads.PrivateAPIMiddleware",
+    "config.uploads.UploadLimitMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -71,7 +73,7 @@ TIME_ZONE = "Asia/Tashkent"
 USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.getenv("MEDIA_ROOT", BASE_DIR / "media"))
 MEDIA_URL = "/private-media/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SESSION_COOKIE_HTTPONLY = True
@@ -91,11 +93,12 @@ SESSION_COOKIE_AGE = 28800
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
-# Database-backed cache makes throttles shared across web processes without a Redis outage bypass.
+REDIS_CACHE_URL = os.getenv("REDIS_CACHE_URL", "redis://127.0.0.1:6379/2")
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "application_cache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_CACHE_URL,
+        "KEY_PREFIX": "quiz-bot",
     }
 }
 REST_FRAMEWORK = {
@@ -113,6 +116,7 @@ CELERY_BEAT_SCHEDULE = {
     "expire-attempts": {"task": "apps.attempts.tasks.reconcile", "schedule": 30.0},
     "cleanup-artifacts": {"task": "apps.reports.tasks.cleanup", "schedule": 3600.0},
 }
+CELERY_TASK_DEFAULT_QUEUE = os.getenv("CELERY_TASK_DEFAULT_QUEUE", "celery")
 CELERY_TASK_TRACK_STARTED = True
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TG_BOT", "")
@@ -123,3 +127,11 @@ LOGGING = {
     "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": "INFO"},
 }
+
+FILE_UPLOAD_HANDLERS = [
+    "config.uploads.BoundedUploadHandler",
+    "django.core.files.uploadhandler.MemoryFileUploadHandler",
+    "django.core.files.uploadhandler.TemporaryFileUploadHandler",
+]
+
+CSRF_FAILURE_VIEW = "config.errors.csrf_failure"

@@ -1,3 +1,16 @@
+import { useUnsavedChanges } from "../components/useUnsavedChanges";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+const profileSchema = z.object({
+  full_name: z
+    .string()
+    .trim()
+    .min(3, "Ism va familiyangizni kiriting.")
+    .max(150),
+  email: z.union([z.email(), z.literal("")]),
+  specialty: z.string().max(150),
+});
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../services/auth";
@@ -5,6 +18,15 @@ import { api } from "../services/api";
 import { Button } from "../components/ui/button";
 export default function Profile() {
   const { user, refresh } = useAuth();
+  const form = useForm({
+    resolver: zodResolver(profileSchema),
+    values: {
+      full_name: user?.full_name || "",
+      email: user?.email || "",
+      specialty: user?.specialty || "",
+    },
+  });
+  useUnsavedChanges(form.formState.isDirty);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -21,29 +43,28 @@ export default function Profile() {
         <h2>{user?.full_name || user?.username}</h2>
         <p className="hint">Login: {user?.username}</p>
         <form
-          onSubmit={async (e) => {
-            e.preventDefault();
+          onSubmit={form.handleSubmit(async (values) => {
             setBusy(true);
             setError("");
-            const d = new FormData(e.currentTarget);
             try {
               await api("profile/", {
                 method: "PATCH",
-                body: JSON.stringify(Object.fromEntries(d)),
+                body: JSON.stringify(values),
               });
               await refresh();
+              form.reset(values);
               setNotice("Profil saqlandi.");
             } catch (e) {
               setError((e as Error).message);
             } finally {
               setBusy(false);
             }
-          }}
+          })}
         >
           <label>
             Ism va familiya
             <input
-              name="full_name"
+              {...form.register("full_name")}
               defaultValue={user?.full_name}
               required
               minLength={3}
@@ -52,16 +73,25 @@ export default function Profile() {
           </label>
           <label>
             Email
-            <input name="email" defaultValue={user?.email} type="email" />
+            <input
+              {...form.register("email")}
+              defaultValue={user?.email}
+              type="email"
+            />
           </label>
           <label>
             Fan
             <input
-              name="specialty"
+              {...form.register("specialty")}
               defaultValue={user?.specialty}
               maxLength={150}
             />
           </label>
+          {Object.keys(form.formState.errors).length > 0 && (
+            <p role="alert" className="notice error">
+              Ism yoki email maydonini tekshiring.
+            </p>
+          )}
           {error && (
             <p role="alert" className="notice error">
               {error}
@@ -70,7 +100,7 @@ export default function Profile() {
           {notice && <p role="status">{notice}</p>}
           <div className="actions">
             <Button disabled={busy}>Saqlash</Button>
-            <Link className="button outline" to="/change-password">
+            <Link className="button secondary-button" to="/change-password">
               Parolni almashtirish
             </Link>
           </div>

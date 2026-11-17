@@ -1,3 +1,4 @@
+import { AccountMenu } from "../components/AccountMenu";
 import { useState } from "react";
 import { NavLink, Outlet, Navigate, useLocation } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,19 +24,34 @@ export default function Shell() {
   const { user, loading, refresh } = useAuth();
   const query = useQueryClient();
   const [mobile, setMobile] = useState(false);
+  const [error, setError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   if (loading) return <Loading />;
   if (!user) return <Navigate to="/login" />;
+  if (!["SUPER_ADMIN", "TEACHER"].includes(user.role))
+    return (
+      <p role="alert">Bu panel faqat o‘qituvchi va administrator uchun.</p>
+    );
   if (user.must_change_password) return <Navigate to="/change-password" />;
+  async function logout() {
+    setLoggingOut(true);
+    setError("");
+    try {
+      await post("auth/logout/");
+      query.removeQueries({ predicate: (q) => q.queryKey[0] !== "me" });
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoggingOut(false);
+    }
+  }
   const nav = [
     ["/", "Boshqaruv paneli", LayoutDashboard],
     ...(user.role === "SUPER_ADMIN"
-      ? [
-          ["/teachers", "O‘qituvchilar", Users] as const,
-          ["/groups", "Guruhlar", Users] as const,
-          ["/settings", "Sozlamalar", Settings] as const,
-        ]
+      ? [["/teachers", "O‘qituvchilar", Users] as const]
       : []),
     [
       "/quizzes",
@@ -44,10 +60,15 @@ export default function Shell() {
     ],
     ["/questions", "Savollar", FileQuestion],
     ["/students", "O‘quvchilar", Users],
+    ...(user.role === "SUPER_ADMIN"
+      ? [["/groups", "Guruhlar", Users] as const]
+      : []),
     ["/results", "Natijalar", BarChart3],
     ["/rankings", "Reyting", Trophy],
     ["/reports", "Hisobotlar", BarChart3],
-    ["/profile", "Profil", Settings],
+    ...(user.role === "SUPER_ADMIN"
+      ? [["/settings", "Sozlamalar", Settings] as const]
+      : [["/profile", "Profil", Settings] as const]),
   ] as const;
   const links = (
     <>
@@ -108,9 +129,7 @@ export default function Shell() {
           </span>
           <div className="header-actions">
             <ThemeToggle />
-            <NavLink className="avatar" to="/profile" aria-label="Profil">
-              {(user.full_name || user.username).slice(0, 1).toUpperCase()}
-            </NavLink>
+            <AccountMenu user={user} onLogout={logout} />
             <div className="user-caption">
               <strong>{user.full_name || user.username}</strong>
               <small>
@@ -120,19 +139,19 @@ export default function Shell() {
             <button
               className="icon"
               aria-label="Hisobdan chiqish"
-              onClick={async () => {
-                await post("auth/logout/");
-                query.removeQueries({
-                  predicate: (q) => q.queryKey[0] !== "me",
-                });
-                await refresh();
-              }}
+              onClick={logout}
+              disabled={loggingOut}
             >
               <LogOut size={18} />
             </button>
           </div>
         </header>
         <main id="main">
+          {error && (
+            <p className="notice error" role="alert">
+              {error}
+            </p>
+          )}
           <Outlet />
         </main>
         <footer>

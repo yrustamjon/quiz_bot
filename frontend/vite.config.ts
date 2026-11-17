@@ -4,7 +4,12 @@ import tailwind from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwind()],
   server: {
-    port: 5173,
-    proxy: { "/api": { target: "http://127.0.0.1:8001", changeOrigin: false } },
+    port: Number(process.env.VITE_PORT || 5173),
+    proxy: {
+      "/api": {
+        target: process.env.BACKEND_URL || "http://127.0.0.1:8001",
+        changeOrigin: false,
+      },
+    },
   },
 });

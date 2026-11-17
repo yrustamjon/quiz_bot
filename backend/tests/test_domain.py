@@ -148,3 +148,124 @@ def test_expired_code_and_snapshot(quiz, student):
     assert snapshot.text == original
     a, _ = answer(a.pk, 123, 0, snapshot.correct_option, 0)
     assert finish(a.pk, 123, True).correct == 1
+
+
+def test_restart_expired_start_preserves_finalization(quiz, student):
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    a = start(student, quiz)
+    Attempt.objects.filter(pk=a.pk).update(
+        deadline=timezone.now() - timedelta(seconds=1)
+    )
+    again = start(student, quiz)
+    assert again.pk == a.pk and again.status == "timed_out"
+    a.refresh_from_db()
+    assert a.status == "timed_out"
+
+
+def test_at_exact_deadline_and_duplicate_reconciliation(quiz, student):
+    from unittest.mock import patch
+
+    from apps.attempts.tasks import reconcile
+
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    a = start(student, quiz)
+    with patch("apps.attempts.services.timezone.now", return_value=a.deadline):
+        result, ok = answer(a.pk, 123, 0, 0, 0)
+        assert not ok and result.status == "timed_out" and result.earned == 0
+    assert reconcile() == 0 and reconcile() == 0
+    a.refresh_from_db()
+    assert a.revision == 1
+
+
+def test_private_start_throttle_survives_failed_transaction(quiz, student):
+    from rest_framework.exceptions import Throttled
+
+    quiz.access = "private"
+    quiz.save()
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    for _ in range(10):
+        with pytest.raises(ValidationError):
+            start(student, quiz, "BAD")
+    with pytest.raises(Throttled):
+        start(student, quiz, "BAD")
+
+
+def test_bot_rankings_cannot_leak_hidden_percentage(quiz, student):
+    from bot.services import quiz_ranking, student_ranking
+
+    quiz.show_percentage = False
+    quiz.save()
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    a = start(student, quiz)
+    a = finish(a.pk, 123, True)
+    data = student_result(a, 123)
+    assert "percentage" not in data and "rank" in data
+    rows, _ = student_ranking(123)
+    assert not rows
+    rows, own = quiz_ranking(123, quiz.pk)
+    assert own == 1 and rows[0]["percentage"] is None
+    assert quiz_ranking(999, quiz.pk) is None
+
+
+def test_access_code_read_and_rotation_are_owner_scoped(client, quiz, student, other):
+    from apps.quizzes.services import regenerate_code
+
+    quiz.access = "private"
+    quiz.save()
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    old = quiz.access_code.code
+    response = client.get(f"/api/quizzes/{quiz.pk}/access-code/")
+    assert (
+        response.data["code"] == old
+        and response["Cache-Control"] == "private, no-store"
+    )
+    new = regenerate_code(quiz)
+    with pytest.raises(ValidationError):
+        start(student, quiz, old)
+    assert start(student, quiz, new)
+    quiz.owner = other
+    quiz.save()
+    assert client.get(f"/api/quizzes/{quiz.pk}/access-code/").status_code == 404
+
+
+def test_private_code_lookup_hides_unavailable_quiz(quiz, student):
+    from apps.quizzes.services import regenerate_code
+
+    from bot.services import by_code
+
+    quiz.access = "private"
+    quiz.save()
+    code = regenerate_code(quiz)
+    assert by_code(student.telegram_id, code) is None
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    code = quiz.access_code.code
+    assert by_code(student.telegram_id, code).pk == quiz.pk
+    quiz.status = "closed"
+    quiz.save()
+    assert by_code(student.telegram_id, code) is None
+
+
+def test_percentage_display_rounding():
+    from apps.attempts.scoring import percent_display
+
+    assert percent_display("2.675000") == "2.68"
+    assert percent_display("2.665000") == "2.67"
+    assert percent_display("99.995000") == "100.00"
+
+
+def test_manual_release_rejects_draft_and_preserves_owner_scope(client, quiz, other):
+    assert client.post(f"/api/quizzes/{quiz.pk}/release-results/").status_code == 400
+    quiz.status = "published"
+    quiz.save()
+    assert client.post(f"/api/quizzes/{quiz.pk}/release-results/").status_code == 200
+    quiz.refresh_from_db()
+    assert quiz.results_released
+    quiz.owner = other
+    quiz.save()
+    assert client.post(f"/api/quizzes/{quiz.pk}/release-results/").status_code == 404

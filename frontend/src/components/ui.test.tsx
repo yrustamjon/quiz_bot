@@ -61,3 +61,6 @@ describe("Accessible production components", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 });
+
+import {formatPercent} from '../services/labels';
+it('uses decimal HALF_UP percentage display consistently',()=>{expect(formatPercent('2.675000')).toBe('2.68');expect(formatPercent('2.665000')).toBe('2.67');expect(formatPercent('99.995000')).toBe('100.00');expect(formatPercent(0)).toBe('0.00')});

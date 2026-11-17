@@ -1,12 +1,12 @@
+import hashlib
 import secrets
 from datetime import timedelta
 
-from django.core.cache import cache
 from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import Throttled, ValidationError
 
-from .models import AuditLog, StudentProfile
+from .models import AuditLog, RateLimitBucket, StudentProfile
 
 
 @transaction.atomic
@@ -22,18 +22,24 @@ def temporary_password(user, actor):
     return password
 
 
+@transaction.atomic
 def rate_limit(key, limit=10, seconds=300):
-    if cache.add(key, 1, seconds):
-        return
-    try:
-        count = cache.incr(key)
-    except ValueError:
-        cache.set(key, 1, seconds)
-        count = 1
-    if count > limit:
+    now = timezone.now()
+    identity = hashlib.sha256(key.encode()).hexdigest()
+    RateLimitBucket.objects.get_or_create(
+        key=identity, defaults={"expires_at": now + timedelta(seconds=seconds)}
+    )
+    bucket = RateLimitBucket.objects.select_for_update().get(pk=identity)
+    if bucket.expires_at <= now:
+        bucket.count = 0
+        bucket.expires_at = now + timedelta(seconds=seconds)
+    if bucket.count >= limit:
         raise Throttled(
-            seconds, detail="Juda ko‘p urinish. Keyinroq qayta urinib ko‘ring."
+            max(1, int((bucket.expires_at - now).total_seconds())),
+            detail="Juda ko‘p urinish. Keyinroq qayta urinib ko‘ring.",
         )
+    bucket.count += 1
+    bucket.save(update_fields=["count", "expires_at"])
 
 
 @transaction.atomic
@@ -51,3 +57,10 @@ def register_student(telegram_id, full_name, username=""):
         student.telegram_username = username or ""
         student.save(update_fields=["telegram_username"])
     return student
+
+
+def temporary_expired(user):
+    return user.must_change_password and (
+        not user.temporary_password_expires_at
+        or user.temporary_password_expires_at <= timezone.now()
+    )

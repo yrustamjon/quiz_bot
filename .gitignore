@@ -234,3 +234,5 @@ test-results/
 *.log
 
 *.tsbuildinfo
+artifacts/
+backend/test.sqlite3*

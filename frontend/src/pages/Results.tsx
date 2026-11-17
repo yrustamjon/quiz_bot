@@ -1,3 +1,16 @@
+import { formatPercent } from "../services/labels";
+import type {
+  Result,
+  ReportRow,
+  Page,
+  CsrfToken,
+  ExportJob,
+} from "../services/types";
+import { ExportJobs } from "../components/ExportJobs";
+import { statusLabel } from "../services/labels";
+import { useAuth } from "../services/auth";
+import { useSearchParams } from "react-router-dom";
+import { Modal } from "../components/ui/dialog";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../services/api";
@@ -10,19 +23,43 @@ export default function Results({
   ranking?: boolean;
   report?: boolean;
 }) {
+  const { user } = useAuth();
+  const [reportType, setReportType] = useState("results");
+  const kind = ranking ? "leaderboard" : report ? reportType : "results";
   const [search, setSearch] = useState("");
-  const [quiz, setQuiz] = useState("");
+  const [teacher, setTeacher] = useState("");
+  const [minScore, setMinScore] = useState("");
+  const [maxScore, setMaxScore] = useState("");
+  const [urlParams] = useSearchParams();
+  const [detail, setDetail] = useState<Result>();
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [quiz, setQuiz] = useState(urlParams.get("quiz") || "");
   const [page, setPage] = useState(1);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const params = `quiz=${quiz}&search=${encodeURIComponent(search)}&page=${page}`;
+  const params = `quiz=${quiz}&search=${encodeURIComponent(search)}&page=${page}&student=${urlParams.get("student") || ""}&start=${start}&end=${end}&teacher=${teacher}&min_score=${minScore}&max_score=${maxScore}`;
   const q = useQuery({
-    queryKey: [ranking ? "rankings" : "results", params],
-    queryFn: () => api((ranking ? "rankings/" : "results/") + "?" + params),
+    queryKey: ["report-data", kind, params],
+    queryFn: () =>
+      api<Page<ReportRow>>(
+        (kind === "results"
+          ? "results/"
+          : kind === "leaderboard"
+            ? "rankings/"
+            : "reports/summary/?type=" + kind + "&") +
+          (kind === "students" || kind === "teachers" ? "" : "?") +
+          params,
+      ),
   });
   const quizzes = useQuery({
     queryKey: ["filter-quizzes"],
-    queryFn: () => api("quizzes/"),
+    queryFn: () => api<Page<import("../services/api").Quiz>>("quizzes/"),
+  });
+  const teachers = useQuery({
+    queryKey: ["report-teacher-choices"],
+    queryFn: () => api<Page<import("../services/api").User>>("teachers/"),
+    enabled: user?.role === "SUPER_ADMIN",
   });
   return (
     <>
@@ -36,14 +73,14 @@ export default function Results({
               : "Sizga ruxsat berilgan testlarning haqiqiy natijalari."}
           </p>
         </div>
-        {!ranking && (
+        {
           <Button
             disabled={busy}
             onClick={async () => {
               setBusy(true);
               setError("");
               try {
-                const token = await api("auth/csrf/");
+                const token = await api<CsrfToken>("auth/csrf/");
                 const r = await fetch("/api/reports/export/?" + params, {
                   method: "POST",
                   credentials: "same-origin",
@@ -51,17 +88,23 @@ export default function Results({
                     "X-CSRFToken": token.csrfToken,
                     "Content-Type": "application/json",
                   },
-                  body: JSON.stringify(quiz ? { quiz: Number(quiz) } : {}),
+                  body: JSON.stringify({
+                    ...(quiz ? { quiz: Number(quiz) } : {}),
+                    report_type: kind,
+                  }),
                 });
                 if (!r.ok)
                   throw new Error("Eksport bajarilmadi. Filtrni tekshiring.");
                 let response = r;
                 if (r.status === 202) {
                   const job = await r.json();
+                  window.dispatchEvent(new Event("export-started"));
                   let ready = false;
                   for (let i = 0; i < 120; i++) {
                     await new Promise((resolve) => setTimeout(resolve, 1000));
-                    const state = await api("reports/exports/" + job.id + "/");
+                    const state = await api<ExportJob>(
+                      "reports/exports/" + job.id + "/",
+                    );
                     if (state.status === "failed")
                       throw new Error(state.error || "Eksport bajarilmadi.");
                     if (state.status === "ready") {
@@ -95,15 +138,124 @@ export default function Results({
           >
             {busy ? "Tayyorlanmoqda…" : "Excel eksporti"}
           </Button>
-        )}
+        }
       </div>
       {error && (
         <p className="notice error" role="alert">
           {error}
         </p>
       )}
+      {report && (
+        <label>
+          Hisobot turi
+          <select
+            value={reportType}
+            onChange={(e) => {
+              setReportType(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="results">Test natijalari</option>
+            <option value="students">O‘quvchi ko‘rsatkichlari</option>
+            <option value="leaderboard">Reyting hisoboti</option>
+            {user?.role === "SUPER_ADMIN" && (
+              <option value="teachers">O‘qituvchilar faolligi</option>
+            )}
+          </select>
+        </label>
+      )}
+      {ranking && (
+        <div className="actions" style={{ marginBottom: 20 }}>
+          <Button
+            variant={!quiz ? "default" : "outline"}
+            onClick={() => {
+              setQuiz("");
+              setPage(1);
+            }}
+          >
+            Umumiy reyting
+          </Button>
+          <Button
+            variant={quiz ? "default" : "outline"}
+            disabled={!quizzes.data?.results.length}
+            onClick={() => {
+              setQuiz(String(quizzes.data?.results[0]?.id || ""));
+              setPage(1);
+            }}
+          >
+            Test reytingi
+          </Button>
+        </div>
+      )}
       <section className="card">
-        <div className="toolbar">
+        <div className="toolbar report-filters" style={{ flexWrap: "wrap" }}>
+          <label>
+            Eng kam foiz
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={minScore}
+              onChange={(e) => {
+                setMinScore(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label>
+            Eng ko‘p foiz
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={maxScore}
+              onChange={(e) => {
+                setMaxScore(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          {user?.role === "SUPER_ADMIN" && (
+            <label>
+              O‘qituvchi filtri
+              <select
+                value={teacher}
+                onChange={(e) => {
+                  setTeacher(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">Barcha o‘qituvchilar</option>
+                {teachers.data?.results.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name || t.username}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Sanadan
+            <input
+              type="date"
+              value={start}
+              onChange={(e) => {
+                setStart(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label>
+            Sanagacha
+            <input
+              type="date"
+              value={end}
+              onChange={(e) => {
+                setEnd(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
           <input
             aria-label="O‘quvchi qidirish"
             placeholder="O‘quvchi ismi…"
@@ -122,7 +274,7 @@ export default function Results({
             }}
           >
             <option value="">Barcha testlar</option>
-            {quizzes.data?.results.map((q: any) => (
+            {quizzes.data?.results.map((q) => (
               <option key={q.id} value={q.id}>
                 {q.title}
               </option>
@@ -138,46 +290,97 @@ export default function Results({
             <table>
               <thead>
                 <tr>
-                  {(ranking
-                    ? ["O‘rin", "O‘quvchi", "Foiz", "Testlar", "Vaqt (s)"]
-                    : [
-                        "O‘quvchi",
-                        "Test",
-                        "To‘g‘ri",
-                        "Noto‘g‘ri",
-                        "Javobsiz",
-                        "Ball",
+                  {(kind === "teachers"
+                    ? [
+                        "O‘qituvchi",
+                        "Login",
+                        "Testlar",
+                        "Urinishlar",
+                        "O‘quvchilar",
                         "Foiz",
-                        "Holat",
                       ]
+                    : kind === "students"
+                      ? ["O‘quvchi", "Urinishlar", "Foiz", "So‘nggi faollik"]
+                      : kind === "leaderboard"
+                        ? ["O‘rin", "O‘quvchi", "Foiz", "Testlar", "Vaqt (s)"]
+                        : [
+                            "O‘quvchi",
+                            "Test",
+                            "To‘g‘ri",
+                            "Noto‘g‘ri",
+                            "Javobsiz",
+                            "Ball",
+                            "Foiz",
+                            "Holat",
+                          ]
                   ).map((x) => (
                     <th key={x}>{x}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {q.data.results.map((x: any) => (
-                  <tr key={x.id || x.student_id}>
-                    {(ranking
+                {q.data.results.map((x) => (
+                  <tr key={x.id || x.student_id || x.quiz__owner_id}>
+                    {(kind === "teachers"
                       ? [
-                          x.rank,
-                          x.name,
-                          Number(x.percentage).toFixed(2) + "%",
+                          x.quiz__owner__full_name,
+                          x.quiz__owner__username,
                           x.quizzes,
-                          x.elapsed_seconds,
+                          x.attempts,
+                          x.students,
+                          formatPercent(x.percentage) + "%",
                         ]
-                      : [
-                          x.student_name,
-                          x.quiz_title,
-                          x.correct,
-                          x.incorrect,
-                          x.unanswered,
-                          `${x.earned}/${x.maximum}`,
-                          Number(x.percentage).toFixed(2) + "%",
-                          x.status,
-                        ]
-                    ).map((v: any, i: number) => (
-                      <td key={i}>{v}</td>
+                      : kind === "students"
+                        ? [
+                            x.student__full_name,
+                            x.attempts,
+                            formatPercent(x.percentage) + "%",
+                            x.last_activity
+                              ? new Date(x.last_activity).toLocaleDateString(
+                                  "uz-UZ",
+                                  { timeZone: "Asia/Tashkent" },
+                                )
+                              : "—",
+                          ]
+                        : kind === "leaderboard"
+                          ? [
+                              x.rank,
+                              x.name,
+                              formatPercent(x.percentage) + "%",
+                              x.quizzes,
+                              x.elapsed_seconds,
+                            ]
+                          : [
+                              x.student_name,
+                              x.quiz_title,
+                              x.correct,
+                              x.incorrect,
+                              x.unanswered,
+                              `${x.earned}/${x.maximum}`,
+                              formatPercent(x.percentage) + "%",
+                              statusLabel[x.status || ""] || x.status,
+                            ]
+                    ).map((v, i) => (
+                      <td key={i}>
+                        {kind === "results" && i === 0 ? (
+                          <button
+                            className="text-link"
+                            onClick={async () => {
+                              try {
+                                setDetail(
+                                  await api<Result>("results/" + x.id + "/"),
+                                );
+                              } catch (e) {
+                                setError((e as Error).message);
+                              }
+                            }}
+                          >
+                            {v}
+                          </button>
+                        ) : (
+                          v
+                        )}
+                      </td>
                     ))}
                   </tr>
                 ))}
@@ -205,6 +408,45 @@ export default function Results({
           </Button>
         </div>
       </section>
+      {report && <ExportJobs />}
+      <Modal
+        open={!!detail}
+        onOpenChange={(v) => {
+          if (!v) setDetail(undefined);
+        }}
+        title="Natija tafsilotlari"
+        description="Urinishdagi saqlangan savollar va javoblar asosida hisoblangan."
+      >
+        {detail && (
+          <>
+            <h3>{detail.student_name}</h3>
+            <p>
+              {detail.quiz_title} · {formatPercent(detail.percentage)}%
+            </p>
+            <p>
+              Boshlangan:{" "}
+              {new Date(detail.started_at).toLocaleString("uz-UZ", {
+                timeZone: "Asia/Tashkent",
+              })}{" "}
+              · Vaqt: {detail.elapsed_seconds}s
+            </p>
+            {detail.questions?.map((q) => (
+              <section className="notice" key={q.position}>
+                <div>
+                  <strong>
+                    {q.position + 1}. {q.text}
+                  </strong>
+                  <p>
+                    Javob:{" "}
+                    {q.selected == null ? "Javobsiz" : q.options[q.selected]}
+                  </p>
+                  <p>To‘g‘ri javob: {q.options[q.correct_option]}</p>
+                </div>
+              </section>
+            ))}
+          </>
+        )}
+      </Modal>
     </>
   );
 }

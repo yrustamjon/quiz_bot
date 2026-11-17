@@ -139,7 +139,7 @@ p {
 .primary:hover {
   background: #1d4ed8;
 }
-.outline {
+.secondary-button {
   background: var(--surface);
   border-color: var(--border);
   color: var(--text);
@@ -865,3 +865,101 @@ dd {
     margin-left: 4px;
   }
 }
+
+[hidden] {
+  display: none !important;
+}
+
+.account-menu {
+  min-width: 220px;
+  max-width: calc(100vw - 24px);
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px #0002;
+  color: var(--text);
+  z-index: 60;
+}
+.account-menu > [role="menuitem"] {
+  display: block;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+}
+.account-menu > [role="menuitem"][data-highlighted] {
+  background: var(--soft);
+  color: var(--primary);
+}
+.account-menu > [role="separator"] {
+  height: 1px;
+  background: var(--border);
+  margin: 5px 0;
+}
+.account-menu > .hint {
+  display: block;
+  padding: 8px 12px;
+}
+
+.table-title {
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mini-icon {
+  flex-shrink: 0;
+}
+.table-wrap td:first-child {
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.notice > div {
+  min-width: 0;
+}
+
+.primary-five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.secondary-three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .primary-five,
+  .secondary-three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .primary-five .stat:last-child,
+  .secondary-three .stat:last-child {
+    grid-column: 1/-1;
+  }
+}
+
+.file-upload {
+  border: 1px dashed var(--border);
+  background: var(--bg);
+  padding: 20px;
+  border-radius: 10px;
+  margin: 20px 0;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  min-width: 0;
+  text-align: center;
+}
+.file-upload label {
+  margin: 0;
+  font-weight: 550;
+}
+.file-upload .hint {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
+.toolbar.report-filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));align-items:end}.report-filters label{margin:0;font-size:12px;min-width:0}.report-filters input,.report-filters select{min-width:0;max-width:100%}
+
+.toolbar.dashboard-filters { padding: 0 0 20px; grid-template-columns: repeat(auto-fit, minmax(140px, 220px)); }

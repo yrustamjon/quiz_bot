@@ -1,4 +1,4 @@
-from celery import shared_task
+from celery import Task, shared_task
 from django.utils import timezone
 
 from apps.questions.models import ImportSession
@@ -8,8 +8,11 @@ from apps.questions.models import ImportSession
 def cleanup():
     from datetime import timedelta
 
+    from apps.accounts.models import RateLimitBucket
+
     from .models import ReportExport
 
+    RateLimitBucket.objects.filter(expires_at__lt=timezone.now()).delete()
     count = ImportSession.objects.filter(expires_at__lt=timezone.now()).delete()[0]
     for job in ReportExport.objects.filter(
         created_at__lt=timezone.now() - timedelta(days=7)
@@ -24,14 +27,29 @@ def cleanup():
 from django.core.files.base import ContentFile
 from django.db import transaction
 
-from apps.accounts.permissions import owned
+from apps.accounts.permissions import is_admin, owned
 from apps.attempts.models import Attempt
 
 from .models import ReportExport
-from .services import export_results
+from .services import export_report, filter_results
 
 
-@shared_task(autoretry_for=(OSError,), retry_backoff=True, max_retries=3)
+class ExportTask(Task):
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        if args:
+            ReportExport.objects.filter(pk=args[0]).update(
+                status="failed", error="Hisobot tayyorlashda xatolik yuz berdi."
+            )
+        import logging
+
+        logging.getLogger(__name__).error(
+            "Report generation failed task=%s type=%s", task_id, type(exc).__name__
+        )
+
+
+@shared_task(
+    base=ExportTask, autoretry_for=(OSError,), retry_backoff=True, max_retries=3
+)
 def generate_export(export_id):
     with transaction.atomic():
         job = (
@@ -41,19 +59,23 @@ def generate_export(export_id):
         )
         if job.status == "ready":
             return str(job.pk)
-        if not job.owner.is_active or job.owner.must_change_password:
+        if (
+            not job.owner.is_active
+            or job.owner.must_change_password
+            or (
+                job.filters.get("report_type") == "teachers" and not is_admin(job.owner)
+            )
+        ):
             job.status = "failed"
             job.error = "Hisobga kirish cheklangan."
             job.save()
             return
         qs = owned(Attempt.objects.all(), job.owner, "quiz__owner")
-        for key, value in job.filters.items():
-            if value and key in ["quiz", "student", "status"]:
-                qs = qs.filter(**{key: value})
-        if job.filters.get("search"):
-            qs = qs.filter(student__full_name__icontains=job.filters["search"])
+        qs = filter_results(qs, job.filters)
         job.file.save(
-            str(job.pk) + ".xlsx", ContentFile(export_results(qs)), save=False
+            str(job.pk) + ".xlsx",
+            ContentFile(export_report(qs, job.filters.get("report_type", "results"))),
+            save=False,
         )
         job.status = "ready"
         job.finished_at = timezone.now()

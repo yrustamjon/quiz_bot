@@ -65,7 +65,31 @@ class Quiz(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
+        indexes = [
+            models.Index(fields=["owner", "created_at"], name="quiz_owner_created_idx")
+        ]
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=["draft", "published", "closed", "archived"]
+                ),
+                name="quiz_valid_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(navigation__in=["sequential", "free"]),
+                name="quiz_valid_navigation",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(access__in=["public", "private"]),
+                name="quiz_valid_access",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(max_attempts__gte=1), name="quiz_valid_attempt_limit"
+            ),
+            models.CheckConstraint(
+                condition=models.Q(passing_score__gte=0, passing_score__lte=100),
+                name="quiz_valid_pass_score",
+            ),
             models.CheckConstraint(
                 condition=models.Q(duration_minutes__gte=1),
                 name="quiz_positive_duration",

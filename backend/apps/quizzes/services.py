@@ -1,3 +1,4 @@
+import logging
 import secrets
 
 from django.db import transaction
@@ -30,6 +31,7 @@ def transition(quiz, target):
     if target not in allowed[quiz.status]:
         raise ValidationError("Test holatini bunday o‘zgartirib bo‘lmaydi.")
     if target == "published":
+        quiz.full_clean()
         questions = [
             link.question for link in quiz.question_links.select_related("question")
         ]
@@ -41,7 +43,9 @@ def transition(quiz, target):
             raise ValidationError("Vaqt oralig‘i noto‘g‘ri.")
         for q in questions:
             if (
-                len(q.options) != 4
+                not isinstance(q.options, list)
+                or not q.text.strip()
+                or len(q.options) != 4
                 or not all(isinstance(x, str) and x.strip() for x in q.options)
                 or q.correct_option not in range(4)
                 or q.points <= 0
@@ -49,6 +53,9 @@ def transition(quiz, target):
                 raise ValidationError("Savolni tekshiring.")
         if quiz.access == "private":
             regenerate_code(quiz)
+    logging.getLogger(__name__).info(
+        "Quiz transition quiz=%s status=%s", quiz.pk, target
+    )
     quiz.status = target
     quiz.save(update_fields=["status", "updated_at"])
     return quiz

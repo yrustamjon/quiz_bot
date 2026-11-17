@@ -21,7 +21,7 @@ export function Modal({
         <Dialog.Content className="dialog">
           <Dialog.Title>{title}</Dialog.Title>
           <Dialog.Description>
-            {description || "Ma’lumotlarni kiriting va tasdiqlang."}
+            {description || "Amal tafsilotlari."}
           </Dialog.Description>
           <Dialog.Close className="icon close" aria-label="Yopish">
             <X size={20} />

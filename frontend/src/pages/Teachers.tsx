@@ -1,3 +1,6 @@
+import { useUnsavedChanges } from "../components/useUnsavedChanges";
+import { useConfirmation } from "../components/ConfirmationProvider";
+import type { Page, CommandResponse } from "../services/types";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -15,10 +18,13 @@ const schema = z.object({
   specialty: z.string().min(1),
 });
 export default function Teachers() {
+  const confirmAction = useConfirmation();
   const { user } = useAuth();
   const [search, setSearch] = useState("");
+  const [active, setActive] = useState("");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState<number>();
   const [secret, setSecret] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -26,18 +32,21 @@ export default function Teachers() {
   const c = useQueryClient();
   const f = useForm({ resolver: zodResolver(schema) });
   const q = useQuery({
-    queryKey: ["teachers", search, page],
+    queryKey: ["teachers", search, page, active],
     queryFn: () =>
-      api(`teachers/?search=${encodeURIComponent(search)}&page=${page}`),
+      api<Page<import("../services/api").User>>(
+        `teachers/?search=${encodeURIComponent(search)}&page=${page}&is_active=${active}`,
+      ),
     enabled: user?.role === "SUPER_ADMIN",
   });
   if (user?.role !== "SUPER_ADMIN")
     return <p role="alert">Bu sahifaga kirish huquqingiz yo‘q.</p>;
+  useUnsavedChanges(open && f.formState.isDirty);
   async function action(id: number, name: string) {
     setBusy(true);
     setError("");
     try {
-      const r = await post(`teachers/${id}/${name}/`);
+      const r = await post<CommandResponse>(`teachers/${id}/${name}/`);
       if (r.temporary_password) setSecret(r.temporary_password);
       c.invalidateQueries({ queryKey: ["teachers"] });
       setNotice("Amal bajarildi.");
@@ -55,7 +64,15 @@ export default function Teachers() {
           <h1>O‘qituvchilar</h1>
           <p>Hisoblar va xavfsiz kirishni boshqaring.</p>
         </div>
-        <Button onClick={() => setOpen(true)}>O‘qituvchi yaratish</Button>
+        <Button
+          onClick={async () => {
+            setEditing(undefined);
+            f.reset({ full_name: "", username: "", email: "", specialty: "" });
+            setOpen(true);
+          }}
+        >
+          O‘qituvchi yaratish
+        </Button>
       </div>
       {error && (
         <p role="alert" className="notice error">
@@ -69,6 +86,18 @@ export default function Teachers() {
       )}
       <section className="card">
         <div className="toolbar">
+          <select
+            aria-label="Hisob holati"
+            value={active}
+            onChange={(e) => {
+              setActive(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Barcha hisoblar</option>
+            <option value="true">Faol</option>
+            <option value="false">Nofaol</option>
+          </select>
           <input
             aria-label="O‘qituvchi qidirish"
             placeholder="Ism yoki login…"
@@ -91,12 +120,14 @@ export default function Teachers() {
                   <th>Ism</th>
                   <th>Login / Email</th>
                   <th>Fan</th>
+                  <th>Testlar</th>
+                  <th>Yaratilgan</th>
                   <th>Holat</th>
                   <th>Amallar</th>
                 </tr>
               </thead>
               <tbody>
-                {q.data.results.map((t: any) => (
+                {q.data.results.map((t) => (
                   <tr key={t.id}>
                     <td>{t.full_name}</td>
                     <td>
@@ -104,15 +135,31 @@ export default function Teachers() {
                       <p className="hint">{t.email}</p>
                     </td>
                     <td>{t.specialty}</td>
+                    <td>{t.quiz_count}</td>
+                    <td>
+                      {new Date(t.created_at).toLocaleDateString("uz-UZ", {
+                        timeZone: "Asia/Tashkent",
+                      })}
+                    </td>
                     <td>{t.is_active ? "Faol" : "Nofaol"}</td>
                     <td>
                       <div className="actions">
                         <Button
                           variant="outline"
+                          onClick={async () => {
+                            setEditing(t.id);
+                            f.reset(t);
+                            setOpen(true);
+                          }}
+                        >
+                          Tahrirlash
+                        </Button>
+                        <Button
+                          variant="outline"
                           disabled={busy}
-                          onClick={() => {
+                          onClick={async () => {
                             if (
-                              confirm(
+                              await confirmAction(
                                 t.is_active
                                   ? "Kirish bekor qilinadi. Hisobni o‘chirasizmi?"
                                   : "Hisob faollashtirilsinmi?",
@@ -129,8 +176,12 @@ export default function Teachers() {
                         <Button
                           disabled={busy}
                           variant="outline"
-                          onClick={() => {
-                            if (confirm("Yangi vaqtinchalik parol berilsinmi?"))
+                          onClick={async () => {
+                            if (
+                              await confirmAction(
+                                "Yangi vaqtinchalik parol berilsinmi?",
+                              )
+                            )
                               action(t.id, "reset-password");
                           }}
                         >
@@ -164,13 +215,37 @@ export default function Teachers() {
           </Button>
         </div>
       </section>
-      <Modal open={open} onOpenChange={setOpen} title="O‘qituvchi yaratish">
+      <Modal
+        open={open}
+        onOpenChange={async (next) => {
+          if (
+            next ||
+            !f.formState.isDirty ||
+            (await confirmAction(
+              "Saqlanmagan o‘qituvchi ma’lumotlarini yopasizmi?",
+            ))
+          )
+            setOpen(next);
+        }}
+        title={editing ? "O‘qituvchini tahrirlash" : "O‘qituvchi yaratish"}
+      >
         <form
           onSubmit={f.handleSubmit(async (v) => {
             setError("");
             try {
-              const t = await post("teachers/", v);
-              setSecret(t.temporary_password);
+              const t = editing
+                ? await api<import("../services/api").User & CommandResponse>(
+                    `teachers/${editing}/`,
+                    {
+                      method: "PATCH",
+                      body: JSON.stringify(v),
+                    },
+                  )
+                : await post<import("../services/api").User & CommandResponse>(
+                    "teachers/",
+                    v,
+                  );
+              if (t.temporary_password) setSecret(t.temporary_password);
               setOpen(false);
               f.reset();
               c.invalidateQueries({ queryKey: ["teachers"] });
@@ -205,7 +280,9 @@ export default function Teachers() {
               {error}
             </p>
           )}
-          <Button disabled={f.formState.isSubmitting}>Yaratish</Button>
+          <Button disabled={f.formState.isSubmitting}>
+            {editing ? "Saqlash" : "Yaratish"}
+          </Button>
         </form>
       </Modal>
       <Modal

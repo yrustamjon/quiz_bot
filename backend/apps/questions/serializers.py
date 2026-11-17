@@ -1,13 +1,14 @@
-import io
-
 from django.core.files.base import ContentFile
-from PIL import Image, UnidentifiedImageError
 from rest_framework import serializers
 
+from .images import normalize_image
 from .models import Question
 
 
 class QuestionSerializer(serializers.ModelSerializer):
+    remove_image = serializers.BooleanField(
+        write_only=True, required=False, default=False
+    )
     image_url = serializers.SerializerMethodField()
 
     class Meta:
@@ -22,6 +23,7 @@ class QuestionSerializer(serializers.ModelSerializer):
             "points",
             "image",
             "image_url",
+            "remove_image",
             "created_at",
         ]
         read_only_fields = ["owner", "created_at"]
@@ -44,25 +46,17 @@ class QuestionSerializer(serializers.ModelSerializer):
     def validate_image(self, value):
         if not value:
             return value
-        if value.size > 5 * 1024 * 1024:
-            raise serializers.ValidationError("Rasm 5 MB dan oshmasin.")
-        try:
-            im = Image.open(value)
-            if (
-                im.format not in ["PNG", "JPEG", "WEBP"]
-                or im.width * im.height > 16000000
-            ):
-                raise ValueError()
-            im.verify()
-            value.seek(0)
-            im = Image.open(value).convert("RGB")
-            out = io.BytesIO()
-            im.save(out, format="PNG")
-            return ContentFile(out.getvalue(), name="image.png")
-        except (
-            UnidentifiedImageError,
-            ValueError,
-            OSError,
-            Image.DecompressionBombError,
-        ):
-            raise serializers.ValidationError("Rasm formati noto‘g‘ri.")
+        value.seek(0)
+        return ContentFile(
+            normalize_image(value.read(5 * 1024 * 1024 + 1)), name="image.png"
+        )
+
+    def update(self, instance, validated_data):
+        remove = validated_data.pop("remove_image", False)
+        if remove:
+            instance.image = ""
+        return super().update(instance, validated_data)
+
+    def create(self, validated_data):
+        validated_data.pop("remove_image", None)
+        return super().create(validated_data)

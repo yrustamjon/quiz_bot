@@ -37,7 +37,28 @@ class Attempt(models.Model):
     elapsed_seconds = models.PositiveIntegerField(default=0)
 
     class Meta:
+        indexes = [
+            models.Index(fields=["status", "deadline"], name="attempt_expiry_idx"),
+            models.Index(
+                fields=["quiz", "status", "student"], name="attempt_quiz_results_idx"
+            ),
+            models.Index(fields=["started_at"], name="attempt_started_idx"),
+        ]
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(
+                    status__in=["in_progress", "completed", "timed_out"]
+                ),
+                name="attempt_valid_status",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(navigation__in=["sequential", "free"]),
+                name="attempt_valid_navigation",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(percentage__gte=0, percentage__lte=100),
+                name="attempt_valid_percentage",
+            ),
             models.UniqueConstraint(
                 fields=["student", "quiz", "number"], name="attempt_number_unique"
             ),

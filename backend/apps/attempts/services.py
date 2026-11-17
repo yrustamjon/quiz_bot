@@ -1,6 +1,7 @@
+import logging
 import random
 from datetime import timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db import transaction
 from django.utils import timezone
@@ -14,7 +15,7 @@ from .models import Attempt, AttemptAnswer, AttemptQuestion
 rng = random.SystemRandom()
 
 
-def access_quiz(student, quiz, code=None):
+def access_quiz(student, quiz, code=None, throttle=True):
     if not student.is_active:
         raise PermissionDenied("Hisob faol emas.")
     now = timezone.now()
@@ -25,7 +26,8 @@ def access_quiz(student, quiz, code=None):
     ):
         raise ValidationError("Test hozir mavjud emas.")
     if quiz.access == "private":
-        rate_limit("code:" + str(student.pk), 10)
+        if throttle:
+            rate_limit("code:" + str(student.pk), 10)
         if (
             not code
             or not QuizAccessCode.objects.filter(
@@ -38,19 +40,30 @@ def access_quiz(student, quiz, code=None):
             raise ValidationError("Kod noto‘g‘ri yoki muddati o‘tgan.")
 
 
-@transaction.atomic
 def start(student, quiz, code=None):
+    # Failed access validation must not roll back its rate-limit accounting.
+    if quiz.access == "private":
+        rate_limit("code:" + str(student.pk), 10)
+    return _start(student, quiz, code)
+
+
+@transaction.atomic
+def _start(student, quiz, code=None):
     quiz = Quiz.objects.select_for_update().get(pk=quiz.pk)
-    access_quiz(student, quiz, code)
-    active = Attempt.objects.filter(
-        student=student, quiz=quiz, status="in_progress"
-    ).first()
+    access_quiz(student, quiz, code, throttle=False)
+    active = (
+        Attempt.objects.select_related("student", "quiz")
+        .filter(student=student, quiz=quiz, status="in_progress")
+        .first()
+    )
     if active:
         reconcile_one(active)
         if active.status == "in_progress":
             return active
     count = Attempt.objects.filter(student=student, quiz=quiz).count()
     if count >= quiz.max_attempts:
+        if active is not None:
+            return active
         raise ValidationError("Urinishlar tugagan.")
     questions = [x.question for x in quiz.question_links.select_related("question")]
     if quiz.shuffle_questions:
@@ -116,13 +129,18 @@ def _finalize(a, status):
         else:
             a.incorrect += 1
     a.percentage = (
-        (a.earned / a.maximum * 100).quantize(Decimal(".000001"))
+        (a.earned / a.maximum * 100).quantize(
+            Decimal(".000001"), rounding=ROUND_HALF_UP
+        )
         if a.maximum
         else Decimal(0)
     )
     a.elapsed_seconds = max(0, int((a.finished_at - a.started_at).total_seconds()))
     a.revision += 1
     a.save()
+    logging.getLogger(__name__).info(
+        "Attempt finalized attempt=%s status=%s", a.pk, a.status
+    )
     return a
 
 
@@ -238,6 +256,13 @@ def student_result(a, telegram_id):
     ]:
         if getattr(a.quiz, flag):
             data.update({k: getattr(a, k) for k in fields})
+    if a.quiz.show_ranking:
+        from apps.reports.services import ranking
+
+        board = ranking(Attempt.objects.filter(quiz=a.quiz), student_visibility=True)
+        data["rank"] = next(
+            (r["rank"] for r in board if r["student_id"] == a.student_id), None
+        )
     if a.quiz.show_detailed_answers:
         data["questions"] = [
             {

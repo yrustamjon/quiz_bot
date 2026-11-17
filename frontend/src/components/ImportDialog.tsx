@@ -1,3 +1,5 @@
+import { FileUpload } from "./FileUpload";
+import type { ImportPreview } from "../services/types";
 import { useState } from "react";
 import { api, post } from "../services/api";
 import { Modal } from "./ui/dialog";
@@ -13,7 +15,7 @@ export function ImportDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [preview, setPreview] = useState<any>();
+  const [preview, setPreview] = useState<ImportPreview>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
@@ -33,41 +35,39 @@ export function ImportDialog({
         XLSX yoki bitta XLSX va rasmlar joylangan ZIP. 10 MB, 500 savolgacha.
         Excel rasmi H ustunidagi savol qatoriga biriktirilsin.
       </p>
-      <label>
-        Import fayli
-        <input
-          type="file"
-          accept=".xlsx,.zip"
-          disabled={busy}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            setError("");
-            setConfirmed(false);
-            setPreview(undefined);
-            if (file.size > 10 * 1024 * 1024) {
-              setError("Fayl 10 MB dan oshmasin.");
-              return;
-            }
-            setBusy(true);
-            try {
-              const data = new FormData();
-              data.append("file", file);
-              data.append("quiz", quizId);
-              setPreview(
-                await api("questions/import/preview/", {
-                  method: "POST",
-                  body: data,
-                }),
-              );
-            } catch (e) {
-              setError((e as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
-      </label>
+      <FileUpload
+        label="Import fayli"
+
+        accept=".xlsx,.zip"
+        disabled={busy}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          setError("");
+          setConfirmed(false);
+          setPreview(undefined);
+          if (file.size > 10 * 1024 * 1024) {
+            setError("Fayl 10 MB dan oshmasin.");
+            return;
+          }
+          setBusy(true);
+          try {
+            const data = new FormData();
+            data.append("file", file);
+            data.append("quiz", quizId);
+            setPreview(
+              await api<ImportPreview>("questions/import/preview/", {
+                method: "POST",
+                body: data,
+              }),
+            );
+          } catch (e) {
+            setError((e as Error).message);
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
       {busy && <p role="status">Tekshirilmoqda…</p>}
       {error && (
         <p role="alert" className="notice error">
@@ -77,26 +77,63 @@ export function ImportDialog({
       {preview && (
         <>
           <h3>{preview.count} ta savol</h3>
-          {preview.errors.map((e: any, i: number) => (
+          <p className="hint">
+            Jami: {preview.total_rows ?? preview.count} · To‘g‘ri:{" "}
+            {preview.count} · Xatoli:{" "}
+            {preview.invalid_rows ?? preview.errors.length} · Rasmlar:{" "}
+            {preview.image_count ?? 0}
+          </p>
+          {preview.errors.map((e, i) => (
             <p key={i} className="error" role="alert">
               {e.row}-qator: {e.message}
             </p>
           ))}
-          <div style={{ maxHeight: 260, overflow: "auto" }}>
-            {preview.rows.map((r: any, i: number) => (
-              <div key={i} className="notice">
-                <span>
-                  {i + 1}. {r.text}
-                </span>
-                {r.image_base64 && (
-                  <img
-                    src={"data:image/png;base64," + r.image_base64}
-                    alt={"Rasm " + (i + 1)}
-                    width={60}
-                  />
-                )}
-              </div>
-            ))}
+          <div
+            className="table-wrap"
+            style={{ maxHeight: 300 }}
+            tabIndex={0}
+            role="region"
+            aria-label="Import savollari"
+          >
+            <table>
+              <caption className="sr-only">
+                Tasdiqlashdan oldingi savollar ro‘yxati
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Qator</th>
+                  <th scope="col">Savol</th>
+                  <th scope="col">To‘g‘ri javob</th>
+                  <th scope="col">Ball</th>
+                  <th scope="col">Rasm</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preview.rows.map((r, i) => (
+                  <tr key={i}>
+                    <td>{r.source_row ?? i + 2}</td>
+                    <td style={{ whiteSpace: "normal", minWidth: 160 }}>
+                      {r.text}
+                    </td>
+                    <td>
+                      {"ABCD"[r.correct_option]}: {r.options[r.correct_option]}
+                    </td>
+                    <td>{r.points}</td>
+                    <td>
+                      {r.image_base64 ? (
+                        <img
+                          src={"data:image/png;base64," + r.image_base64}
+                          alt={`${r.source_row ?? i + 2}-qator rasmi`}
+                          width={60}
+                        />
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
           {confirmed ? (
             <p role="status">{preview.count} ta savol import qilindi.</p>

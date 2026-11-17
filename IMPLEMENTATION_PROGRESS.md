@@ -1,39 +1,50 @@
 # Implementation progress
 
-Specification: [MASTER_PROMPT](docs/MASTER_PROMPT.md). User-facing language: Uzbek.
+Specifications: [MASTER_PROMPT](docs/MASTER_PROMPT.md) and [FRONTEND_MASTER_PROMPT](docs/FRONTEND_MASTER_PROMPT.md). Communication/UI: Uzbek. Native services only; no Docker. Preserve existing data and Git changes. Direct pushes to main are authorized; environment publication is not.
 
-## Completed
-- Phase 0: audited clean existing repository (only LICENSE and Python .gitignore). No existing application or secrets modified.
-- Saved complete master specification for recovery.
+## Current phase
+Phase 11 — final hardening, acceptance evidence and runtime verification. Phases 0–10 have implemented components and passing automated workflows; live human Telegram acceptance is still outstanding. The chronological notes below are historical, not current TODO lists.
 
-## Current
-- Phase 1: Django foundation and secure account onboarding.
-- Installing maintained Django 5.2 LTS, DRF, Aiogram 3, Celery, Redis client, openpyxl, Pillow and test tools in .venv.
+## Current verified evidence
+- Backend: **58 passed**, including malformed authentication input, temporary-password reuse, private image ownership, scoring/ranking ties, imports and concurrency/security regressions.
+- Frontend: **15 tests passed**, strict TypeScript production build and ESLint zero warnings, including StrictMode Back/link cancel/proceed guards.
+- Full isolated real-browser suite passed, including actual SQL/API authentication/onboarding/import/publish, question/group management, private-code rotation, draft duplication/deletion, student/result detail, four XLSX kinds and a real Celery background export.
+- Expanded browser actions passed: teacher edits/deactivation/reset, student activation, manual raster add/remove, question duplication/deletion, bank selection/reorder/detach.
+- **42 route/dialog/theme axe combinations, zero violations**. Seven viewport widths checked: 360/390/768/1024/1280/1440/1920. Latest import-preview table and data-router/form guards passed integration, management and axe reruns.
+- Python (54 pinned packages) and npm production dependency audits: zero known vulnerabilities. Earlier DRF/Pillow advisories were fixed by upgrades. **Full npm audit FAILED: picomatch <=4.0.7 ReDoS (GHSA-fc5q-39xc-vjpf / CVE-2026-112366), 14 high dependency-chain entries. Registry latest is 4.0.7, no fixed release listed. This is build/test tooling; no audit suppression or force upgrade used. Full audit is a blocking CI gate.**
+- Django system/production checks and migration drift checks passed; pip check passed. Redis FSM write/reconnect/read and isolated-key cleanup passed.
+- **18 screenshots confirmed delivered via Telegram**, credentials/destination outside Git.
 
-## Remaining tasks / acceptance gates
-1. Accounts/session/CSRF/password onboarding, migrations and negative security tests.
-2. React/Vite/Tailwind/shadcn foundations, session client and protected routes.
-3. Teacher administration and permission tests.
-4. Quiz/question lifecycle, snapshots, bank and ownership.
-5. XLSX template, bounded ZIP/embedded images, transactional preview/confirm.
-6. Aiogram registration, discovery, private codes and persistent identity.
-7. Transactional attempts, sequential/free navigation, callback validation.
-8. Deadline/resume/confirmation/scoring and Celery reconciliation.
-9. Scoped results, release policies and rankings.
-10. Real dashboards, reports, filtered XLSX exports and protected downloads.
-11. Integration/security/concurrency/UI tests, native macOS instructions, production hardening.
+## Current work
+Final source review and authorized main checkpoint push. Functional checks pass; final completion is blocked by the upstream tooling advisory and a live human Telegram exam.
 
-## Decisions
-- No Docker. Existing checkout is used. SQLite initially; explicit write serialization and transaction safeguards required; PostgreSQL migration documented.
-- Bot calls shared Django services directly. Exam state persists in SQL, transient registration in Redis.
-- Sessions and CSRF remain authoritative. Private images/reports require authorization.
-- No demo data in normal runtime. Live Telegram validation requires a securely configured bot token.
+## Remaining acceptance gates / exact next steps
+1. Finish screenshot delivery and source scan; record commit/push result. Do not publish environment settings.
+2. Track upstream [picomatch PR 194](https://github.com/micromatch/picomatch/pull/194) and [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf). Official advisory JSON was fetched from github/advisory-database (2026/10); affected versions introduced 0, last affected 4.0.7, no fixed event. `npm view picomatch dist-tags` returns latest 4.0.7. Once an audited fixed release is available, update the lockfile within supported ranges, rerun **full** npm audit, build/lint/Vitest/browser suite and push. Do not hide this audit failure or use `--force` to bypass it.
+3. A real human Telegram student must register, answer and confirm finish (also exercise private/image/resume). Current linked destination has no registered StudentProfile or completed attempt. Handler tests use real SQL with mocked Telegram transport; getMe/polling/screenshots do not prove human examination flow.
+4. GitHub CI execution is unverified until observed remotely. Full npm audit is expected to remain red on the current upstream advisory. Production deployment and PostgreSQL load validation are outside current local evidence.
 
-## Validation
-- Initial git status clean. Python 3.12.14; Node 24.22.1; npm 11.9.0.
+Runtime after latest source: Django 29692, bot 29693, worker 29694, Beat 29695 (verify current PIDs, do not assume after environment restart). Real Django CSRF HTTP 200, Celery reconcile roundtrip 0, real Bot API getMe passed. User data was preserved.
 
-## Recovery / exact next steps
-Read docs/MASTER_PROMPT.md and this file, run `git status --short`, inspect existing files before editing. Resume first unchecked task; do not regenerate working components. Check installation session then implement/test Phase 1. Never mark unverified acceptance gates complete.
+## Recovery / exact commands
+Read both prompts and this file, inspect `git status --short` and current source before edits. Do not recreate completed components. Run:
+
+```sh
+.venv/bin/pytest -q
+.venv/bin/ruff check backend bot scripts
+.venv/bin/python backend/manage.py check
+.venv/bin/python backend/manage.py makemigrations --check --dry-run
+cd frontend
+npm run build
+npm run lint
+npm test
+cd ..
+.venv/bin/python scripts/browser_suite.py
+```
+
+Browser tests use temporary DB/media/credentials and a unique Celery queue, not the user's DB. Artifacts are outside Git under `/workspace/artifacts/e2e`. Bot token is a runtime binding (`TG_BOT` alias supported); never print/copy it into tracked files. Last pushed main checkpoint: `399c3a7`; current validated improvements await commit. Update this section before interruption or final handoff.
+
+## Historical implementation journal
 
 ## Update — 2026-11-17, resumed after publication
 - Preserved previous code and read both specifications. User authorized direct commits/pushes to main; no environment publication authorized.
@@ -95,3 +106,49 @@ No claim of completion: full bank workflow/group UI/settings/profile edits, comp
 - Worker restarted with current report tasks (86971), Beat running (37489), Redis active on localhost. Real background export test is next.
 - Screenshots for teacher list/import preview/published quiz confirmed sent. **10 total screenshots sent**. No temporary password screenshot was captured.
 - Next: push verified increment, restart Django after profile endpoints, test background export and new group/profile/bank actions; expand all-page dark/mobile/axe audit; close remaining accepted feature gaps (student/result details/date filters/teacher edits/group membership/full wizard navigation/error recovery/security hardening/portable tests/docs).
+
+## Continuing hardening (post 399c3a7)
+- Native full browser suite now available: `.venv/bin/python scripts/browser_suite.py` starts its own Django/Vite ports, fresh SQL DB/media, temporary accounts, and cleans up credentials/processes. Existing DB is not used. Full initial isolated suite passed (4 browser scripts including axe).
+- Added report kinds (result/student summary/leaderboard/admin-only teacher activity) and matching real XLSX output; result detail and student detail scoping; result date/score filters; profile updates; teacher editing; bank reorder and quiz question cloning; unsaved-change guards.
+- Added DB enum/score/attempt-limit constraints (new accounts/quizzes/attempts migrations), applied them. Added transactional hashed RateLimitBucket model for cross-process throttling; failed private start attempts now account outside the failed transaction (regression test added). Redis outage never bypasses throttling.
+- Tightened normalized image-size and aggregate staging limits to prevent repeated JPEG/ZIP references inflating staging memory.
+- Fixed expired start rollback: repeated start on a maxed expired attempt returns its finalized result instead of rolling back finalization.
+- Added bot deleted-message acknowledgement recovery and generic update error handler; SQL snapshots remain authoritative.
+- Backend 33 passed before latest throttle regression (current run pending); production npm audit reported 0 vulnerabilities. Ruff passed. Portable build needed explicit @types/node for Vite environment settings; installed and build passed.
+- Remaining work before any completion claim: finish minimal group membership and account dropdown, dashboard required summaries/custom ranges, typed API cleanup, fresh runtime restarts and all-page/all-dialog/browser checks, audit dependencies, broaden release/ranking/race/upload tests, live Telegram student exam (currently only polling/getMe/handler tests verified), complete final docs and acceptance traceability. Current source changes after 399c3a7 not yet pushed.
+
+## Current checkpoint — expanded implementation and dependency hardening
+- Latest backend **38 passed** (includes a full Aiogram callback journey using real SQL services and mocked transport, plus hidden-percentage ranking regression). Live human Telegram exam is still unverified.
+- Frontend **8 Vitest tests passed** (wizard retains edits, blocks unsaved publication, result preview toggles, invalid import cannot confirm, plus auth/theme/dialog/states). Several first test attempts exposed matcher/type issues; corrected selectors and reran without weakening feature assertions.
+- Isolated full browser suite now includes group membership, persisted profile edits, manual questions, real student/result detail, four real XLSX report kinds, dropdown keyboard controls and expanded responsive light/dark pages. Latest completed suite passed; **24 route/theme axe checks, zero violations**. Later wizard/image changes need another complete run.
+- Reviewed new group dark and result-detail screenshots. Corrected outline class collision with Tailwind, excessive percentage decimals, read-only dialog description, menu ordering and explicit Toshkent date display. Sent three more screenshots; total confirmed delivery pending session 31741 (expected total 13).
+- Required UI now includes account dropdown, notifications, group membership/edit/delete, bank duplication/ordering/detach, quiz list subject/access/order filters, three distinct wizard stages with preserved settings and RHF/Zod validation, private code management, manual result release, report queue history/downloads.
+- Added resource-bound upload middleware/handler, shared bounded raster normalization, image removal without breaking historical files, archive normalization/unsupported embedded-image guards, stronger publication validation and transactional quiz mutation checks.
+- Identified dependency advisories (DRF 3.16.1 and Pillow 12.3.0). Upgraded to **DRF 3.18.3 / Pillow 13.0.0**, pip check passed, tests passed, pip-audit rerun found **0 known vulnerabilities**. npm production audit found **0 vulnerabilities**. Audit cache permission failure was fixed with an explicit writable cache path; no verification bypass used.
+- Restarted owned runtime services after upgrades: Django 36862, bot polling 35296, worker 1452, Beat 49861. Further source edits require another restart before final live verification.
+- README rewritten around actual implemented behavior and native macOS commands; historical pending lists above are superseded by this checkpoint. No production-readiness claim.
+
+### Exact recovery / next tasks
+1. Read both master prompts + progress and inspect git. Current changes since main commit 399c3a7 are uncommitted; do not recreate implemented components.
+2. Finish current build/check sessions, run full isolated browser suite after newest wizard/image/toast/filter changes; fix any real failures. Extend axe to wizard/dialogs and verify read-only modal descriptions/date formats/mobile controls.
+3. Complete remaining acceptance gaps: full race/release/ranking cases, code/ownership/upload negative coverage, accessible destructive confirmation UX, final typing/lint cleanup, meaningful production/deployment checks. Compare implementation to original acceptance matrix rather than file counts.
+4. Refactor oversized bot callback handler into focused modules after keeping its tested service interface. Verify Celery failure/status and cleanup paths and restart current workers after task edits.
+5. Run final audits/security checks, update current validation evidence and remaining limits, secret-scan staged source, commit/push to main (already authorized). User expects screenshots via Telegram; destination outside repo and TG_BOT runtime binding are working. No environment publication authorized.
+6. A live human Telegram exam requires actual student participation; do not claim polling/getMe or mocked transport tests establish it. Continue all independent work before reporting a genuine external blocker.
+
+## Continuing verification checkpoint
+- Latest completed backend run: **40 passed**; added expired temporary-session regression (run in progress). Frontend **12 tests passed** including routing boundaries, wizard/state/preview/import rejection. TypeScript API responses now have explicit shared contracts; `api` defaults to unknown and explicit `any` is prohibited by ESLint. Full typecheck passed after fixing response narrowing and optional media fields.
+- Added Uzbek Zod locale, localized DRF/CSRF error responses, server-side preview error cleanup, consistent mutation notifications and localized network errors.
+- Added reusable keyboard-accessible Uzbek file picker/drop zone. Shared normalized image service is used by manual and XLSX uploads. Three-stage wizard now places publishing settings in the third stage, retains values, prevents unsaved publication and supports previous/next navigation.
+- Added role/database-scoped 20-second Redis dashboard cache with SQL fallback; unit tests use isolated memory cache and never clear live Redis. Throttles remain transactional SQL. Added dashboard status distribution, recent attempts, most-active quizzes and custom date ranges.
+- Refactored bot into registration/callback/presentation modules with preserved tested callback interface. Added private per-quiz ranking permission and hidden-percentage protection; Telegram overall board excludes private/unreleased/hidden-percent quizzes.
+- Most recent completed isolated browser suite: all five scripts passed (real auth/teacher onboarding, drafts/import/publish, group membership, manual questions, profile persistence, details, four reports, responsive themes), **24 axe combinations: 0 violations**. Subsequent typed/file-picker/wizard/UI changes require another final run.
+- Added native (no Docker) read-only GitHub CI configuration using official action commit SHAs verified from upstream v6 tags. CI has not yet run remotely; do not claim a remote CI result.
+- Still no final completion claim: full last-run browser/security/acceptance matrix and a human Telegram exam remain to verify. The initial human check question was sent asynchronously; continue independent work while awaiting it.
+
+## Final hardening evidence — 2026-11-17
+- 58 backend + 15 frontend tests passed. Typecheck/build/lint, Django deploy/system/drift, pip check and source hygiene passed.
+- Full browser run passed login/panel/onboarding/import/publish; the new Back test initially attempted cross-document `page.goto` history (native beforeunload), so its custom-modal expectation timed out. Corrected the test to create real SPA history with a client link; management plus 42 axe checks then passed. No product assertion was removed.
+- Management now checks teacher edit/deactivate/reactivate/reset, student status, raster persistence/removal, question duplication/deletion, bank order/detach, private code rotation, draft duplicate/delete cancel/confirm, dirty link cancel and browser Back confirm, actual Celery report generation and authenticated download.
+- Browser helper now terminates only its own process groups, cleaning npm/Vite children. Optional --scripts supports focused fresh-environment reruns.
+- Added full dependency audit after production audit exposed no issues: actual full audit found upstream build/test picomatch ReDoS with no fixed published release. Functional pass is not a complete security acceptance. See remaining gate above and implementation report.

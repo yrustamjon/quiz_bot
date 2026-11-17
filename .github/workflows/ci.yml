@@ -1,0 +1,61 @@
+name: Native validation
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis-server
+          redis-server --daemonize yes --bind 127.0.0.1 --port 6379 --save '' --appendonly no
+          python -m venv .venv
+          .venv/bin/pip install -r backend/requirements.lock
+          npm --prefix frontend ci
+          cd frontend && npx playwright install --with-deps chromium
+      - name: Backend checks
+        run: |
+          .venv/bin/python scripts/check_source_hygiene.py
+          .venv/bin/ruff check backend bot scripts
+          .venv/bin/pytest -q
+          .venv/bin/python -m compileall -q backend bot
+      - name: Frontend checks
+        working-directory: frontend
+        run: |
+          npm run lint
+          npm test
+          npm run build
+          npm audit --omit=dev
+      - name: Audit Python dependencies
+        if: always()
+        run: |
+          python -m venv /tmp/quiz-audit-venv
+          /tmp/quiz-audit-venv/bin/pip install pip-audit
+          /tmp/quiz-audit-venv/bin/pip-audit -r backend/requirements.lock --disable-pip --no-deps
+      - name: Isolated real browser workflows
+        run: .venv/bin/python scripts/browser_suite.py
+      - name: Audit all frontend dependencies
+        if: always()
+        working-directory: frontend
+        run: npm audit
+      - name: Upload synthetic test artifacts
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: browser-verification
+          path: ../artifacts/e2e
+          if-no-files-found: ignore
+          retention-days: 7

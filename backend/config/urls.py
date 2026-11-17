@@ -14,6 +14,7 @@ from apps.reports.views import (
     ExportView,
     RankingView,
     ResultViewSet,
+    SummaryReportView,
 )
 from django.contrib import admin
 from django.urls import include, path
@@ -28,6 +29,7 @@ router.register("teachers", TeacherViewSet, basename="teacher")
 router.register("students", StudentViewSet, basename="student")
 router.register("groups", GroupViewSet)
 urlpatterns = [
+    path("api/reports/summary/", SummaryReportView.as_view()),
     path("api/profile/", ProfileView.as_view()),
     path("api/rankings/", RankingView.as_view()),
     path("api/reports/export/", ExportView.as_view()),

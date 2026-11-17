@@ -1,29 +1,47 @@
+import { useConfirmation } from "../components/ConfirmationProvider";
+import { useAuth } from "../services/auth";
+import type { Student, Question, Page } from "../services/types";
+import { Link } from "react-router-dom";
 import { useState } from "react";
 import { QuestionEditor } from "../components/QuestionEditor";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../services/api";
+import { api, post } from "../services/api";
 import { Loading, ErrorState, Empty } from "../components/states";
 import { Button } from "../components/ui/button";
 export default function Directory({
   kind,
 }: {
-  kind: "students" | "questions" | "teachers";
+  kind: "students" | "questions";
 }) {
+  const { user } = useAuth();
+  const confirmAction = useConfirmation();
   const [search, setSearch] = useState("");
+  const [subject, setSubject] = useState("");
+  const [quiz, setQuiz] = useState("");
   const cache = useQueryClient();
   const [editor, setEditor] = useState(false);
-  const [editing, setEditing] = useState<any>();
+  const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<Question>();
   const [error, setError] = useState("");
   const [page, setPage] = useState(1);
+  const isQuestion = (row: Question | Student): row is Question =>
+    "options" in row;
   const titles = {
     students: "O‘quvchilar",
     questions: "Savollar",
     teachers: "O‘qituvchilar",
   };
   const q = useQuery({
-    queryKey: [kind, search, page],
+    queryKey: [kind, search, page, subject, quiz],
     queryFn: () =>
-      api(`${kind}/?search=${encodeURIComponent(search)}&page=${page}`),
+      api<Page<Question | Student>>(
+        `${kind}/?search=${encodeURIComponent(search)}&page=${page}&subject=${encodeURIComponent(subject)}&quiz=${quiz}`,
+      ),
+  });
+  const quizzes = useQuery({
+    queryKey: ["directory-quizzes"],
+    queryFn: () => api<Page<import("../services/api").Quiz>>("quizzes/"),
+    enabled: kind === "students",
   });
   return (
     <>
@@ -35,7 +53,7 @@ export default function Directory({
         </div>
         {kind === "questions" && (
           <Button
-            onClick={() => {
+            onClick={async () => {
               setEditing(undefined);
               setEditor(true);
             }}
@@ -51,6 +69,34 @@ export default function Directory({
       )}
       <section className="card">
         <div className="toolbar">
+          {kind === "questions" && (
+            <input
+              aria-label="Savol fani"
+              placeholder="Fan bo‘yicha filtr"
+              value={subject}
+              onChange={(e) => {
+                setSubject(e.target.value);
+                setPage(1);
+              }}
+            />
+          )}
+          {kind === "students" && (
+            <select
+              aria-label="Ishtirok etgan test"
+              value={quiz}
+              onChange={(e) => {
+                setQuiz(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">Barcha testlar</option>
+              {quizzes.data?.results.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.title}
+                </option>
+              ))}
+            </select>
+          )}
           <input
             aria-label="Qidirish"
             placeholder="Qidirish…"
@@ -73,21 +119,105 @@ export default function Directory({
                   <th>{kind === "questions" ? "Savol" : "Ism"}</th>
                   <th>{kind === "questions" ? "Fan" : "Login"}</th>
                   {kind === "questions" && <th>Amallar</th>}
+                  {kind === "students" && (
+                    <>
+                      <th>Urinishlar</th>
+                      <th>O‘rtacha foiz</th>
+                      <th>So‘nggi faollik</th>
+                      <th>Holat</th>
+                      {user?.role === "SUPER_ADMIN" && <th>Amallar</th>}
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
-                {q.data.results.map((x: any) => (
+                {q.data.results.map((x) => (
                   <tr key={x.id}>
-                    <td>{x.full_name || x.text || x.username}</td>
                     <td>
-                      {x.subject || x.username || x.telegram_username || "—"}
+                      {!isQuestion(x) ? (
+                        <Link className="text-link" to={"/students/" + x.id}>
+                          {x.full_name}
+                        </Link>
+                      ) : (
+                        x.text
+                      )}
                     </td>
-                    {kind === "questions" && (
+                    <td>
+                      {isQuestion(x) ? x.subject : x.telegram_username || "—"}
+                    </td>
+                    {!isQuestion(x) && (
+                      <>
+                        <td>{x.participation_count}</td>
+                        <td>{x.average_percentage ?? "—"}%</td>
+                        <td>
+                          {x.last_activity
+                            ? new Date(x.last_activity).toLocaleDateString(
+                                "uz-UZ",
+                                { timeZone: "Asia/Tashkent" },
+                              )
+                            : "—"}
+                        </td>
+                        <td>{x.is_active ? "Faol" : "Nofaol"}</td>
+                        {user?.role === "SUPER_ADMIN" && (
+                          <td>
+                            <Button
+                              variant="outline"
+                              disabled={busy}
+                              onClick={async () => {
+                                if (
+                                  !(await confirmAction(
+                                    x.is_active
+                                      ? "O‘quvchi hisobini cheklaysizmi?"
+                                      : "Hisobni faollashtirasizmi?",
+                                  ))
+                                )
+                                  return;
+                                setBusy(true);
+                                try {
+                                  await post(
+                                    `students/${x.id}/${x.is_active ? "deactivate" : "activate"}/`,
+                                  );
+                                  cache.invalidateQueries({
+                                    queryKey: ["students"],
+                                  });
+                                } catch (e) {
+                                  setError((e as Error).message);
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                            >
+                              {x.is_active ? "Nofaol qilish" : "Faollashtirish"}
+                            </Button>
+                          </td>
+                        )}
+                      </>
+                    )}
+                    {isQuestion(x) && (
                       <td>
                         <div className="actions">
                           <Button
                             variant="outline"
-                            onClick={() => {
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              try {
+                                await post(`questions/${x.id}/duplicate/`);
+                                cache.invalidateQueries({
+                                  queryKey: ["questions"],
+                                });
+                              } catch (e) {
+                                setError((e as Error).message);
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Nusxalash
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={async () => {
                               setEditing(x);
                               setEditor(true);
                             }}
@@ -97,7 +227,10 @@ export default function Directory({
                           <Button
                             variant="outline"
                             onClick={async () => {
-                              if (!confirm("Savol o‘chirilsinmi?")) return;
+                              if (
+                                !(await confirmAction("Savol o‘chirilsinmi?"))
+                              )
+                                return;
                               try {
                                 await api("questions/" + x.id + "/", {
                                   method: "DELETE",

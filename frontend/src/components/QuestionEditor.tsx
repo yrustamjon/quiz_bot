@@ -1,8 +1,12 @@
+import { useConfirmation } from "./ConfirmationProvider";
+import { FileUpload } from "./FileUpload";
+import type { Question } from "../services/types";
+import { useUnsavedChanges } from "./useUnsavedChanges";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { api, post } from "../services/api";
+import { api } from "../services/api";
 import { Modal } from "./ui/dialog";
 import { Button } from "./ui/button";
 const schema = z.object({
@@ -23,10 +27,12 @@ export function QuestionEditor({
   open: boolean;
   onClose: () => void;
   onSaved: (id: number) => Promise<void> | void;
-  question?: any;
+  question?: Question;
 }) {
+  const confirmAction = useConfirmation();
   const [error, setError] = useState("");
   const [image, setImage] = useState<File>();
+  const [removeImage, setRemoveImage] = useState(false);
   const [preview, setPreview] = useState<string>();
   const f = useForm({
     resolver: zodResolver(schema),
@@ -40,11 +46,18 @@ export function QuestionEditor({
       points: question?.points ?? 1,
     },
   });
+  const hasChanges = f.formState.isDirty || !!image || removeImage;
+  useUnsavedChanges(open && hasChanges);
   return (
     <Modal
       open={open}
-      onOpenChange={(v) => {
-        if (!v) onClose();
+      onOpenChange={async (v) => {
+        if (
+          !v &&
+          (!hasChanges ||
+            (await confirmAction("Saqlanmagan savolni yopasizmi?")))
+        )
+          onClose();
       }}
       title={question ? "Savolni tahrirlash" : "Yangi savol"}
     >
@@ -57,23 +70,41 @@ export function QuestionEditor({
               options: [v.a, v.b, v.c, v.d],
               correct_option: v.correct,
               points: v.points,
+              remove_image: removeImage,
             };
-            const q = question
-              ? await api("questions/" + question.id + "/", {
-                  method: "PATCH",
-                  body: JSON.stringify(body),
-                })
-              : await post("questions/", body);
+            let payload: string | FormData = JSON.stringify(body);
             if (image) {
-              const data = new FormData();
-              data.append("image", image);
-              await api("questions/" + q.id + "/", {
-                method: "PATCH",
-                body: data,
-              });
+              const multipart = new FormData();
+              for (const [key, value] of Object.entries(body)) {
+                multipart.append(
+                  key,
+                  Array.isArray(value) ? JSON.stringify(value) : String(value),
+                );
+              }
+              multipart.append("image", image);
+              payload = multipart;
             }
+            const q = await api<Question>(
+              question ? `questions/${question.id}/` : "questions/",
+              {
+                method: question ? "PATCH" : "POST",
+                body: payload,
+              },
+            );
             await onSaved(q.id);
             if (preview) URL.revokeObjectURL(preview);
+            f.reset({
+              text: "",
+              a: "",
+              b: "",
+              c: "",
+              d: "",
+              correct: 0,
+              points: 1,
+            });
+            setImage(undefined);
+            setPreview(undefined);
+            setRemoveImage(false);
             onClose();
           } catch (e) {
             setError((e as Error).message);
@@ -119,27 +150,40 @@ export function QuestionEditor({
             required
           />
         </label>
-        <label>
-          Rasm (PNG/JPEG/WebP, 5 MB gacha)
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              if (file.size > 5 * 1024 * 1024) {
-                setError("Rasm 5 MB dan oshmasin.");
-                return;
-              }
+        <FileUpload
+          label="Rasm (PNG/JPEG/WebP, 5 MB gacha)"
+
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            if (file.size > 5 * 1024 * 1024) {
+              setError("Rasm 5 MB dan oshmasin.");
+              return;
+            }
+            if (preview) URL.revokeObjectURL(preview);
+            setRemoveImage(false);
+            setImage(file);
+            setPreview(URL.createObjectURL(file));
+          }}
+        />
+        {(preview || (!removeImage && question?.image_url)) && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
               if (preview) URL.revokeObjectURL(preview);
-              setImage(file);
-              setPreview(URL.createObjectURL(file));
+              setPreview(undefined);
+              setImage(undefined);
+              setRemoveImage(true);
             }}
-          />
-        </label>
-        {preview && (
+          >
+            Rasmni olib tashlash
+          </Button>
+        )}
+        {(preview || (!removeImage && question?.image_url)) && (
           <img
-            src={preview}
+            src={preview || question?.image_url || undefined}
             alt="Yuklanadigan rasm"
             style={{ maxWidth: "100%", maxHeight: 160 }}
           />
@@ -156,7 +200,17 @@ export function QuestionEditor({
         )}
         <div className="actions">
           <Button disabled={f.formState.isSubmitting}>Saqlash</Button>
-          <Button type="button" variant="outline" onClick={onClose}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={async () => {
+              if (
+                !hasChanges ||
+                (await confirmAction("Saqlanmagan savolni yopasizmi?"))
+              )
+                onClose();
+            }}
+          >
             Bekor qilish
           </Button>
         </div>

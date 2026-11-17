@@ -2,6 +2,7 @@ from django.http import FileResponse
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, ValidationError
+from rest_framework.response import Response
 
 from apps.accounts.permissions import owned
 
@@ -15,7 +16,10 @@ class QuestionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             owned(Question.objects.all(), self.request.user)
-            .filter(text__icontains=self.request.query_params.get("search", ""))
+            .filter(
+                text__icontains=self.request.query_params.get("search", ""),
+                subject__icontains=self.request.query_params.get("subject", ""),
+            )
             .order_by("-id")
         )
 
@@ -43,3 +47,11 @@ class QuestionViewSet(viewsets.ModelViewSet):
             return FileResponse(q.image.open("rb"), content_type="image/png")
         except OSError:
             raise NotFound()
+
+    @action(detail=True, methods=["post"])
+    def duplicate(self, request, pk=None):
+        question = self.get_object()
+        question.pk = None
+        question.owner = request.user
+        question.save()
+        return Response(self.get_serializer(question).data, status=201)

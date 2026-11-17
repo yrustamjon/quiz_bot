@@ -4,6 +4,23 @@ from .models import Quiz
 
 
 class QuizSerializer(serializers.ModelSerializer):
+    access_code = serializers.SerializerMethodField()
+
+    def get_access_code(self, obj):
+        return (
+            obj.access_code.code
+            if obj.access == "private"
+            and hasattr(obj, "access_code")
+            and obj.access_code.active
+            else None
+        )
+
+    owner_name = serializers.SerializerMethodField()
+    participants = serializers.IntegerField(read_only=True, default=0)
+
+    def get_owner_name(self, obj):
+        return obj.owner.full_name or obj.owner.username
+
     available_questions = serializers.IntegerField(
         source="question_links.count", read_only=True
     )

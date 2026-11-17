@@ -1,4 +1,20 @@
-import { useState } from "react";
+import type { Quiz } from "../services/api";
+import { tashkentDateInput } from "../services/labels";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+const quizSchema = z.looseObject({
+  title: z.string().trim().min(1, "Test nomini kiriting.").max(200),
+  subject: z.string().trim().min(1, "Fanni kiriting.").max(100),
+  duration_minutes: z.coerce.number().int().min(1).max(1440),
+  question_count: z.coerce.number().int().min(1).max(500),
+  passing_score: z.coerce.number().min(0).max(100),
+  max_attempts: z.coerce.number().int().min(1).max(100),
+  navigation: z.enum(["sequential", "free"]),
+  access: z.enum(["public", "private"]),
+});
+import { useUnsavedChanges } from "./useUnsavedChanges";
+import { useState, useEffect } from "react";
 import { api } from "../services/api";
 import { Button } from "./ui/button";
 const flags: [string, string][] = [
@@ -14,22 +30,34 @@ const flags: [string, string][] = [
 export function QuizSettings({
   quiz,
   onSaved,
+  section = "basic",
+  onDirtyChange,
 }: {
-  quiz: any;
+  quiz: Quiz;
   onSaved: () => void;
+  section?: "basic" | "publishing";
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [values, setValues] = useState<any>(quiz);
+  const [values, setValues] = useState<Quiz>(quiz);
+  const [saved, setSaved] = useState<Quiz>(quiz);
+  const form = useForm({ resolver: zodResolver(quizSchema), values });
+  useUnsavedChanges(
+    quiz.status === "draft" && JSON.stringify(values) !== JSON.stringify(saved),
+  );
+  useEffect(() => {
+    onDirtyChange?.(JSON.stringify(values) !== JSON.stringify(saved));
+  }, [values, saved, onDirtyChange]);
   return (
     <form
-      onSubmit={async (e) => {
-        e.preventDefault();
+      className="quiz-settings-form"
+      onSubmit={form.handleSubmit(async (validated) => {
         setBusy(true);
         setError("");
         try {
-          const data = { ...values };
+          const data = { ...validated };
           delete data.id;
           delete data.owner;
           delete data.available_questions;
@@ -38,16 +66,17 @@ export function QuizSettings({
             body: JSON.stringify(data),
           });
           setNotice("Sozlamalar saqlandi.");
+          setSaved({ ...values });
           onSaved();
         } catch (e) {
           setError((e as Error).message);
         } finally {
           setBusy(false);
         }
-      }}
+      })}
     >
       <fieldset disabled={quiz.status !== "draft" || busy}>
-        <div className="two-col">
+        <div hidden={section !== "basic"} className="two-col">
           {[
             ["title", "Test nomi", "text"],
             ["subject", "Fan", "text"],
@@ -61,7 +90,7 @@ export function QuizSettings({
               <input
                 type={type}
                 required
-                value={values[key]}
+                value={String(values[key] ?? "")}
                 min={key === "passing_score" ? 0 : 1}
                 max={
                   key === "passing_score"
@@ -83,7 +112,7 @@ export function QuizSettings({
             </label>
           ))}
         </div>
-        <label>
+        <label hidden={section !== "basic"}>
           Tavsif
           <textarea
             value={values.description}
@@ -93,50 +122,51 @@ export function QuizSettings({
           />
         </label>
         <div className="two-col">
-          <label>
+          <label hidden={section !== "basic"}>
             Navigatsiya
             <select
               value={values.navigation}
               onChange={(e) =>
-                setValues({ ...values, navigation: e.target.value })
+                setValues({
+                  ...values,
+                  navigation: e.target.value as Quiz["navigation"],
+                })
               }
             >
               <option value="sequential">Ketma-ket — ortga qaytish yo‘q</option>
               <option value="free">Erkin — javobni o‘zgartirish mumkin</option>
             </select>
           </label>
-          <label>
+          <label hidden={section !== "publishing"}>
             Kirish
             <select
               value={values.access}
-              onChange={(e) => setValues({ ...values, access: e.target.value })}
+              onChange={(e) =>
+                setValues({
+                  ...values,
+                  access: e.target.value as Quiz["access"],
+                })
+              }
             >
               <option value="public">Ochiq</option>
               <option value="private">Kod bilan</option>
             </select>
           </label>
         </div>
-        <div className="two-col">
+        <div hidden={section !== "publishing"} className="two-col">
           {["opens_at", "closes_at"].map((key, i) => (
             <label key={key}>
-              {i ? "Yopilish" : "Boshlanish"} vaqti
+              {i ? "Yopilish" : "Boshlanish"} vaqti (Toshkent)
               <input
                 type="datetime-local"
                 value={
-                  values[key]
-                    ? new Date(
-                        new Date(values[key]).getTime() -
-                          new Date(values[key]).getTimezoneOffset() * 60000,
-                      )
-                        .toISOString()
-                        .slice(0, 16)
-                    : ""
+                  values[key] ? tashkentDateInput(String(values[key])) : ""
                 }
                 onChange={(e) =>
                   setValues({
                     ...values,
                     [key]: e.target.value
-                      ? new Date(e.target.value).toISOString()
+                      ? new Date(e.target.value + "+05:00").toISOString()
                       : null,
                   })
                 }
@@ -144,7 +174,7 @@ export function QuizSettings({
             </label>
           ))}
         </div>
-        <label>
+        <label hidden={section !== "publishing"}>
           Natijalarni e’lon qilish
           <select
             value={values.result_release_mode}
@@ -158,24 +188,30 @@ export function QuizSettings({
           </select>
         </label>
         <div className="two-col">
-          {flags.map(([key, label]) => (
-            <label
-              style={{ display: "flex", alignItems: "center", gap: 10 }}
-              key={key}
-            >
-              <input
-                style={{ width: 20, minHeight: 20 }}
-                type="checkbox"
-                checked={values[key]}
-                onChange={(e) =>
-                  setValues({ ...values, [key]: e.target.checked })
-                }
-              />
-              {label}
-            </label>
-          ))}
+          {flags
+            .filter(([key]) =>
+              section === "basic"
+                ? key.startsWith("shuffle")
+                : !key.startsWith("shuffle"),
+            )
+            .map(([key, label]) => (
+              <label
+                style={{ display: "flex", alignItems: "center", gap: 10 }}
+                key={key}
+              >
+                <input
+                  style={{ width: 20, minHeight: 20 }}
+                  type="checkbox"
+                  checked={!!values[key]}
+                  onChange={(e) =>
+                    setValues({ ...values, [key]: e.target.checked })
+                  }
+                />
+                {label}
+              </label>
+            ))}
         </div>
-        <div className="notice">
+        <div hidden={section !== "publishing"} className="notice">
           <div>
             <strong>Telegram natijasi namunasi</strong>
             <p>
@@ -201,6 +237,22 @@ export function QuizSettings({
           {busy ? "Saqlanmoqda…" : "Qoralama sozlamalarini saqlash"}
         </Button>
       </fieldset>
+      {Object.keys(form.formState.errors).length > 0 && (
+        <p role="alert" className="notice error">
+          Sozlamalarni tekshiring:{" "}
+          {Object.keys(form.formState.errors)
+            .map((key) =>
+              key === "title"
+                ? "Test nomi"
+                : key === "subject"
+                  ? "Fan"
+                  : key === "max_attempts"
+                    ? "Urinishlar soni"
+                    : "Sonli maydon",
+            )
+            .join(", ")}
+        </p>
+      )}
       {notice && <p role="status">{notice}</p>}
       {error && (
         <p className="notice error" role="alert">

@@ -1,3 +1,4 @@
+import type { Question, Page } from "../services/types";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../services/api";
@@ -21,7 +22,9 @@ export function QuestionBank({
   const bank = useQuery({
     queryKey: ["question-bank", search, page],
     queryFn: () =>
-      api(`questions/?search=${encodeURIComponent(search)}&page=${page}`),
+      api<Page<Question>>(
+        `questions/?search=${encodeURIComponent(search)}&page=${page}`,
+      ),
   });
   async function save(ids: number[]) {
     setBusy(true);
@@ -106,10 +109,9 @@ export function QuestionBank({
       ) : (
         bank.data.results
           .filter(
-            (q: any) =>
-              q.owner === ownerId && !selected.some((s) => s.id === q.id),
+            (q) => q.owner === ownerId && !selected.some((s) => s.id === q.id),
           )
-          .map((q: any) => (
+          .map((q) => (
             <div className="section-heading" key={q.id}>
               <p>{q.text}</p>
               <Button

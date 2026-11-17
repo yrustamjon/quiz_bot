@@ -19,6 +19,10 @@ class User(AbstractUser):
 
     class Meta:
         constraints = [
+            models.CheckConstraint(
+                condition=models.Q(role__in=["SUPER_ADMIN", "TEACHER", "STUDENT"]),
+                name="user_valid_role",
+            ),
             models.UniqueConstraint(Lower("username"), name="username_case_unique"),
             models.UniqueConstraint(
                 Lower("email"), condition=~models.Q(email=""), name="email_case_unique"
@@ -50,3 +54,9 @@ class AuditLog(models.Model):
     action = models.CharField(max_length=100)
     object_id = models.CharField(max_length=64, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class RateLimitBucket(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    count = models.PositiveIntegerField(default=0)
+    expires_at = models.DateTimeField(db_index=True)
