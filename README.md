@@ -78,3 +78,41 @@ SQLite uses IMMEDIATE transactions and a 30-second busy timeout, plus uniqueness
 Use HTTPS, `DJANGO_DEBUG=false`, a strong private key, explicit allowed hosts/CSRF origins, secure cookies and a same-origin reverse proxy. Run `manage.py check --deploy`, configure static serving with `collectstatic`, keep media behind authenticated endpoints, protect Redis on localhost and manage services with launchd/systemd. Full production review remains pending.
 
 Back up SQLite consistently using `sqlite3 backend/db.sqlite3 ".backup 'backup.sqlite3'"` while coordinating writes; separately back up `backend/media`. Restore to a stopped instance, run migrations and verify ownership and file access. Preserve secret environment configuration securely outside distributable backups. Never commit databases, tokens, generated exports or .env files.
+
+## Implemented increment: Excel, reporting and Telegram
+
+The current increment also implements teacher onboarding UI, manual question editor, bank selection/order/removal, quiz settings/result preview, XLSX import dialog, scoped results/rankings, synchronous/queued exports, minimal group creation/deletion, profile updates and Aiogram chat handlers. Detailed coverage and remaining limitations are recorded in IMPLEMENTATION_PROGRESS.md; the earlier pending list describes the initial checkpoint and is superseded here.
+
+### Excel convention and limits
+
+`GET /api/questions/import/template/` returns template version `QUIZ_BOT_TEMPLATE_V1`, with Questions and Instructions sheets. Columns are Question, Option A/B/C/D, Correct Answer (A–D), Points, Image File Name. At most 500 questions, upload 10 MB, total uncompressed archive 40 MB, 1500 members, each image 5 MB / 16 million pixels. Supported raster input: PNG, JPEG, WebP; stored as re-encoded PNG. ZIP contains one XLSX plus relative referenced images. Embedded images must have their top-left anchor in column H on the exact question row, one per row. The pinned openpyxl image-reading adapter necessarily uses private APIs; regression tests cover embedded and ZIP import. Unsupported/ambiguous placement is rejected, never silently omitted. Formulas/external links, traversal, symlinks and duplicate archive names are rejected. Duplicate question rows within one upload are errors. Preview lasts 30 minutes; confirm is atomic and idempotent. Private images require the authenticated question endpoint.
+
+### Additional API
+
+- `PATCH /api/profile/` allows only full name, email, specialty.
+- `/api/questions/import/{template,preview,confirm}/`
+- `/api/results/`, result detail; `/api/rankings/?quiz=<id>`
+- `POST /api/reports/export/` generates XLSX; more than 5000 rows (or `background:true`) queues a job.
+- `/api/reports/exports/`, job detail and `/{id}/download/` are owner-scoped. Artifacts expire after seven days.
+
+Rankings choose each student's best final attempt per quiz, order by average percentage descending, elapsed time ascending and student ID ascending, using sequential positions. Telegram rankings omit unreleased/ranking-hidden quizzes and use first names. This average does not normalize difficulty between subjects.
+
+### Redis, worker, scheduler and bot
+
+```sh
+brew services start redis
+source .venv/bin/activate
+PYTHONPATH=backend celery -A config worker --pool=solo --concurrency=1 --loglevel=INFO
+# Another terminal:
+PYTHONPATH=backend celery -A config beat --schedule /tmp/quiz-bot-beat --loglevel=INFO
+# Another terminal, project root:
+python -m bot.main
+```
+
+Set TELEGRAM_BOT_TOKEN securely before starting the bot. TG_BOT is supported as an existing cloud binding alias. Never place tokens in URLs printed to logs or in Git. The bot respects HTTPS_PROXY when provided; local macOS typically needs no proxy. Redis stores transient registration/code state; SQL stores exam-critical state and deadline. Reconciliation runs every 30 seconds, but synchronous services independently reject late answers.
+
+Bot commands: `/start`, `/menu`, `/help`, `/continue`, `/cancel`. `/cancel` resets only conversational state; active exams and deadlines remain intact. Inline menus support public quizzes, private codes, resume, results, rankings and profile. A real Aiogram getMe and polling startup were verified; **a complete live student exam has not yet been verified**.
+
+### Browser validation
+
+Vitest: `cd frontend && npm test`. Build: `npm run build`. ESLint: `npm exec eslint -- src`. Current lint reports explicit-any typing warnings; no errors at the last completed check. `accessibility-check.mjs` audits real pages with axe; 20 initial route/theme combinations passed with zero automated violations. Newly added groups/settings/quiz dialogs still need expanded audit. Browser integration currently uses isolated runtime accounts in `/workspace/artifacts`; that machinery must be made portable before considering the E2E suite complete. Native cloud Redis was compiled outside the checkout; macOS uses Homebrew.

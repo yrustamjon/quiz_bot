@@ -1,0 +1,7 @@
+# Django's declarative class metadata and generated migration operations intentionally
+# use shared lists; they are not per-instance mutable application defaults.
+[lint.per-file-ignores]
+"**/migrations/*.py" = ["RUF012"]
+"**/models.py" = ["RUF012"]
+"**/serializers.py" = ["RUF012"]
+"**/views.py" = ["RUF012"]

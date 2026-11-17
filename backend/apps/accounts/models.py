@@ -2,11 +2,13 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models.functions import Lower
 
+
 class User(AbstractUser):
     class Role(models.TextChoices):
-        SUPER_ADMIN = 'SUPER_ADMIN', 'Super Admin'
-        TEACHER = 'TEACHER', 'O‘qituvchi'
-        STUDENT = 'STUDENT', 'O‘quvchi'
+        SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
+        TEACHER = "TEACHER", "O‘qituvchi"
+        STUDENT = "STUDENT", "O‘quvchi"
+
     role = models.CharField(max_length=16, choices=Role.choices, default=Role.STUDENT)
     full_name = models.CharField(max_length=150, blank=True)
     specialty = models.CharField(max_length=150, blank=True)
@@ -14,13 +16,21 @@ class User(AbstractUser):
     temporary_password_expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
-        constraints = [models.UniqueConstraint(Lower('username'), name='username_case_unique'), models.UniqueConstraint(Lower('email'), condition=~models.Q(email=''), name='email_case_unique')]
+        constraints = [
+            models.UniqueConstraint(Lower("username"), name="username_case_unique"),
+            models.UniqueConstraint(
+                Lower("email"), condition=~models.Q(email=""), name="email_case_unique"
+            ),
+        ]
+
     def save(self, *args, **kwargs):
         if self.is_superuser:
             self.role = self.Role.SUPER_ADMIN
             self.is_staff = True
         super().save(*args, **kwargs)
+
 
 class StudentProfile(models.Model):
     telegram_id = models.BigIntegerField(unique=True)
@@ -29,9 +39,11 @@ class StudentProfile(models.Model):
     is_active = models.BooleanField(default=True)
     registered_at = models.DateTimeField(auto_now_add=True)
 
+
 class Group(models.Model):
     name = models.CharField(max_length=150, unique=True)
-    students = models.ManyToManyField(StudentProfile, blank=True, related_name='groups')
+    students = models.ManyToManyField(StudentProfile, blank=True, related_name="groups")
+
 
 class AuditLog(models.Model):
     actor = models.ForeignKey(User, null=True, on_delete=models.SET_NULL)

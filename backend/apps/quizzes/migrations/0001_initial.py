@@ -7,7 +7,6 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     initial = True
 
     dependencies = [
@@ -16,52 +15,164 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='Quiz',
+            name="Quiz",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=200)),
-                ('description', models.TextField(blank=True)),
-                ('subject', models.CharField(max_length=100)),
-                ('duration_minutes', models.PositiveIntegerField(default=30, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(1440)])),
-                ('question_count', models.PositiveIntegerField(default=10, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(500)])),
-                ('passing_score', models.DecimalField(decimal_places=2, default=60, max_digits=5, validators=[django.core.validators.MinValueValidator(0), django.core.validators.MaxValueValidator(100)])),
-                ('max_attempts', models.PositiveIntegerField(default=1, validators=[django.core.validators.MinValueValidator(1), django.core.validators.MaxValueValidator(100)])),
-                ('shuffle_questions', models.BooleanField(default=False)),
-                ('shuffle_options', models.BooleanField(default=False)),
-                ('navigation', models.CharField(choices=[('sequential', 'Ketma-ket'), ('free', 'Erkin')], default='sequential', max_length=16)),
-                ('access', models.CharField(choices=[('public', 'Ochiq'), ('private', 'Yopiq')], default='public', max_length=8)),
-                ('status', models.CharField(choices=[('draft', 'draft'), ('published', 'published'), ('closed', 'closed'), ('archived', 'archived')], db_index=True, default='draft', max_length=12)),
-                ('opens_at', models.DateTimeField(blank=True, null=True)),
-                ('closes_at', models.DateTimeField(blank=True, null=True)),
-                ('show_score', models.BooleanField(default=True)),
-                ('show_percentage', models.BooleanField(default=True)),
-                ('show_correct_count', models.BooleanField(default=True)),
-                ('show_incorrect_count', models.BooleanField(default=True)),
-                ('show_detailed_answers', models.BooleanField(default=False)),
-                ('show_ranking', models.BooleanField(default=True)),
-                ('result_release_mode', models.CharField(choices=[('instant', 'Darhol'), ('after_close', 'Yopilgach'), ('manual', 'Qo‘lda')], default='instant', max_length=12)),
-                ('results_released', models.BooleanField(default=False)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('owner', models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='quizzes', to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("title", models.CharField(max_length=200)),
+                ("description", models.TextField(blank=True)),
+                ("subject", models.CharField(max_length=100)),
+                (
+                    "duration_minutes",
+                    models.PositiveIntegerField(
+                        default=30,
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(1440),
+                        ],
+                    ),
+                ),
+                (
+                    "question_count",
+                    models.PositiveIntegerField(
+                        default=10,
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(500),
+                        ],
+                    ),
+                ),
+                (
+                    "passing_score",
+                    models.DecimalField(
+                        decimal_places=2,
+                        default=60,
+                        max_digits=5,
+                        validators=[
+                            django.core.validators.MinValueValidator(0),
+                            django.core.validators.MaxValueValidator(100),
+                        ],
+                    ),
+                ),
+                (
+                    "max_attempts",
+                    models.PositiveIntegerField(
+                        default=1,
+                        validators=[
+                            django.core.validators.MinValueValidator(1),
+                            django.core.validators.MaxValueValidator(100),
+                        ],
+                    ),
+                ),
+                ("shuffle_questions", models.BooleanField(default=False)),
+                ("shuffle_options", models.BooleanField(default=False)),
+                (
+                    "navigation",
+                    models.CharField(
+                        choices=[("sequential", "Ketma-ket"), ("free", "Erkin")],
+                        default="sequential",
+                        max_length=16,
+                    ),
+                ),
+                (
+                    "access",
+                    models.CharField(
+                        choices=[("public", "Ochiq"), ("private", "Yopiq")],
+                        default="public",
+                        max_length=8,
+                    ),
+                ),
+                (
+                    "status",
+                    models.CharField(
+                        choices=[
+                            ("draft", "draft"),
+                            ("published", "published"),
+                            ("closed", "closed"),
+                            ("archived", "archived"),
+                        ],
+                        db_index=True,
+                        default="draft",
+                        max_length=12,
+                    ),
+                ),
+                ("opens_at", models.DateTimeField(blank=True, null=True)),
+                ("closes_at", models.DateTimeField(blank=True, null=True)),
+                ("show_score", models.BooleanField(default=True)),
+                ("show_percentage", models.BooleanField(default=True)),
+                ("show_correct_count", models.BooleanField(default=True)),
+                ("show_incorrect_count", models.BooleanField(default=True)),
+                ("show_detailed_answers", models.BooleanField(default=False)),
+                ("show_ranking", models.BooleanField(default=True)),
+                (
+                    "result_release_mode",
+                    models.CharField(
+                        choices=[
+                            ("instant", "Darhol"),
+                            ("after_close", "Yopilgach"),
+                            ("manual", "Qo‘lda"),
+                        ],
+                        default="instant",
+                        max_length=12,
+                    ),
+                ),
+                ("results_released", models.BooleanField(default=False)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                (
+                    "owner",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.PROTECT,
+                        related_name="quizzes",
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
             ],
         ),
         migrations.CreateModel(
-            name='QuizAccessCode',
+            name="QuizAccessCode",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('code', models.CharField(max_length=32, unique=True)),
-                ('expires_at', models.DateTimeField(blank=True, null=True)),
-                ('active', models.BooleanField(default=True)),
-                ('quiz', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='access_code', to='quizzes.quiz')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("code", models.CharField(max_length=32, unique=True)),
+                ("expires_at", models.DateTimeField(blank=True, null=True)),
+                ("active", models.BooleanField(default=True)),
+                (
+                    "quiz",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="access_code",
+                        to="quizzes.quiz",
+                    ),
+                ),
             ],
         ),
         migrations.AddConstraint(
-            model_name='quiz',
-            constraint=models.CheckConstraint(condition=models.Q(('duration_minutes__gte', 1)), name='quiz_positive_duration'),
+            model_name="quiz",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("duration_minutes__gte", 1)),
+                name="quiz_positive_duration",
+            ),
         ),
         migrations.AddConstraint(
-            model_name='quiz',
-            constraint=models.CheckConstraint(condition=models.Q(('question_count__gte', 1)), name='quiz_positive_count'),
+            model_name="quiz",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("question_count__gte", 1)),
+                name="quiz_positive_count",
+            ),
         ),
     ]
