@@ -1,0 +1,3 @@
+import {Link} from 'react-router-dom';
+import {useAuth} from '../services/auth';
+export default function Profile(){const {user}=useAuth();return <><div className="page-heading"><div><div className="eyebrow">HISOB SOZLAMALARI</div><h1>Profil</h1><p>Shaxsiy hisobingiz va xavfsizlik.</p></div></div><section className="card padded"><h2>{user?.full_name||user?.username}</h2><dl><dt>Login</dt><dd>{user?.username}</dd><dt>Email</dt><dd>{user?.email||'Kiritilmagan'}</dd><dt>Fan</dt><dd>{user?.specialty||'Kiritilmagan'}</dd></dl><Link className="button outline" to="/change-password">Parolni almashtirish</Link></section></>}

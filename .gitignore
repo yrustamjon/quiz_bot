@@ -221,3 +221,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Quiz platform local state
+node_modules/
+frontend/dist/
+backend/db.sqlite3*
+backend/media/
+.coverage
+htmlcov/
+playwright-report/
+test-results/
+*.log
+
+*.tsbuildinfo
