@@ -20,15 +20,15 @@ Latest user priority: Telegram bot was visually cluttered and slow in the user's
 
 User clarified the screenshots came from a local installation. Cloud database differences are expected; do not migrate or overwrite either DB. Cloud changes do not automatically replace a running process on the user's Mac. After the authorized main push, local source must be pulled and the old bot process stopped/restarted. No fixed millisecond improvement is claimed without new local measurements; `Bot interaction kind=… render_ms=… total_ms=…` logs permit verification without logging payloads or secrets.
 
-Current source after main 69d4e65 awaits final documentation/source scan and push. The open upstream picomatch advisory remains a security gate; its candidate PR was tested and still fails three bounded adversarial cases.
+Source checkpoint **465a5b2** was pushed successfully to `origin/main` after 77 passing backend tests, source hygiene and staged-diff checks. The current documentation follow-up records delivery. The open upstream picomatch advisory remains a security gate; its candidate PR was tested and still fails three bounded adversarial cases.
 
 ## Remaining acceptance gates / exact next steps
-1. Screenshot delivery complete: **22 confirmed**. Finish the bot UX checkpoint source scan/commit/push and record delivery. Keep environment publication under user control.
+1. Bot UX/hardening checkpoint **465a5b2** pushed and remote SHA verified. Screenshot delivery: **22 confirmed**. Keep environment publication under user control.
 2. Track upstream [picomatch PR 194](https://github.com/micromatch/picomatch/pull/194) and [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf). Official advisory JSON was fetched from github/advisory-database (2026/10); affected versions introduced 0, last affected 4.0.7, no fixed event. `npm view picomatch dist-tags` returns latest 4.0.7. Once an audited fixed release is available, update the lockfile within supported ranges, rerun **full** npm audit, build/lint/Vitest/browser suite and push. Do not hide this audit failure or use `--force` to bypass it.
 3. Apply main to the local installation (`git pull --ff-only origin main`, stop old polling process, activate .venv, `python -m bot.main`). User screenshots show local registration, public lists and invalid-code feedback; new layout, actual local latency and full exam completion still need local verification. Avoid two polling processes for the same bot token. Handler tests use real SQL with test transport; they do not substitute for a live local exam.
 4. GitHub CI execution is unverified until observed remotely. Full npm audit is expected to remain red on the current upstream advisory. Production deployment and PostgreSQL load validation are outside current local evidence.
 
-Runtime after latest source: Django 40137, bot 40138, worker 40139, Beat 40140 (verify current PIDs after environment restoration). Worker real queue roundtrip + captured startup source fingerprint passed. User data was preserved.
+Runtime: Django 40137 and Beat 40140 remain available; worker **44993** restarted with current source, real queue roundtrip + startup fingerprint passed. **Cloud bot polling intentionally stopped** to avoid a conflict when the user runs the same token locally; screenshot sendPhoto works without polling. Verify PIDs/status after environment restoration. No database was moved or reset.
 
 ## Recovery / exact commands
 Read both prompts and this file, inspect `git status --short` and current source before edits. Do not recreate completed components. Run:
@@ -46,7 +46,7 @@ cd ..
 .venv/bin/python scripts/browser_suite.py
 ```
 
-Browser tests use temporary DB/media/credentials and a unique Celery queue, not the user's DB. Artifacts are outside Git under `/workspace/artifacts/e2e`. Bot token is a runtime binding (`TG_BOT` alias supported); never print/copy it into tracked files. Last verified source checkpoint pushed to main: `308bec7` (100 files, 58 backend + 15 frontend tests). This final progress record is a documentation follow-up. Update this section before interruption or final handoff.
+Browser tests use temporary DB/media/credentials and a unique Celery queue, not the user's DB. Artifacts are outside Git under `/workspace/artifacts/e2e`. Bot token is a runtime binding (`TG_BOT` alias supported); never print/copy it into tracked files. Last verified source checkpoint pushed to main: `465a5b2` (77 backend + 15 frontend tests; 50 browser axe combinations). This final progress record is a documentation follow-up. Update this section before interruption or final handoff.
 
 ## Historical implementation journal
 
@@ -186,3 +186,9 @@ No claim of completion: full bank workflow/group UI/settings/profile edits, comp
 - Native button styles use supported Aiogram fields: primary selection, success start and danger finish. Selected answers indicate the student's saved choice, never the correct answer before permitted release. No grading, timer, callback ownership/revision or visibility flag was relaxed.
 - The user confirmed the supplied screenshots were local; no production data was moved or deleted. Reference @QuizBot private screens were unavailable, so no exact visual-copy claim is made.
 - New frontend recovery screens and all six isolated browser scripts already passed; total 50 axe combinations (42 routes/dialogs + 8 dynamic state/theme), zero violations. Four extra screenshots confirmed delivered, **22 total**.
+
+## Delivered checkpoint / local verification handoff
+- `465a5b2` pushed to main and remote SHA confirmed; working source was clean afterward. Current docs-only follow-up records this evidence.
+- Cloud polling was gracefully stopped after user clarified the screenshots were local; `runtime-bot.status` outside Git records why. No live Telegram chat history, local database, or credentials were changed. Worker 44993 passed the current-source readiness check.
+- Local steps: stop the old bot with Ctrl+C; `git pull --ff-only origin main`; activate .venv; install backend/requirements.lock if needed; run migrate; `python -m bot.main`; open /menu. Keep the existing .env, SQL database and media. Restart an existing worker after source changes and verify with scripts/check_worker.py.
+- Still external/unverified: the new visual/latency behavior in the user's local Telegram client, completion of a real local exam, GitHub CI observation (API network access previously denied), and upstream picomatch ReDoS remediation. Do not turn these into a blanket completion claim or suppress the security gates.

@@ -1,6 +1,6 @@
 # Quiz Bot — amalga oshirish va tekshiruv hisoboti
 
-2026-11-18 (Asia/Tashkent). Oldingi main checkpoint: `69d4e65`. Joriy Telegram UX, runtime va input-hardening tuzatishlari yakuniy pushga tayyorlanmoqda. 22 ta screenshot Telegram orqali yuborilgani tasdiqlandi.
+2026-11-18 (Asia/Tashkent). Telegram UX, runtime va input-hardening source checkpoint **465a5b2** main branchga push qilindi, remote SHA tasdiqlandi. 22 ta screenshot Telegram orqali yuborilgani tasdiqlandi.
 
 Asos: [MASTER_PROMPT](MASTER_PROMPT.md) va [FRONTEND_MASTER_PROMPT](FRONTEND_MASTER_PROMPT.md). Qayta davom ettirish holati: [IMPLEMENTATION_PROGRESS](../IMPLEMENTATION_PROGRESS.md).
 
@@ -38,7 +38,7 @@ Haqiqiy Telegram API ulanishi, polling va screenshot yuborish tekshirildi. Bot h
 
 Telegram UX yangilandi: 3 qatorli menyu, 5 tadan test, bitta xabar ichida sahifalash, bir natijali tarix, savol/javob progressi va native rangli boshqaruvlar. Bir xil tez bosishlar takroriy edit yubormaydi. Rasm file-ID orqali qayta ishlatiladi, eski ID rad etilsa asl rasm qayta yuklanadi. Eski/o‘chirilgan xabarda xavfsiz fallback bor. API cheklovi sabab juda uzun yoki photo-to-text holatlarida alohida davomiy xabar kerak bo‘lishi mumkin.
 
-Foydalanuvchi rasmlar lokal muhitdan ekanini aniqlashtirdi. Yangi kod lokalda pull/restart qilingach ko‘rinadi; lokal real javob tezligi hali o‘lchanmagan. @QuizBot ichki suhbat ekranlari bu muhitda tekshirilmagan.
+Foydalanuvchi rasmlar lokal muhitdan ekanini aniqlashtirdi. Bir token bilan ikki poller ishlamasligi uchun cloud sinov polleri xavfsiz to‘xtatildi; screenshot yuborish imkoniyati saqlanadi. Yangi kod lokalda pull/restart qilingach ko‘rinadi; lokal real javob tezligi hali o‘lchanmagan. @QuizBot ichki suhbat ekranlari bu muhitda tekshirilmagan.
 
 ## G. Xavfsizlik
 
