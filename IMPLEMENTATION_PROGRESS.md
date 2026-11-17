@@ -16,10 +16,10 @@ Phase 11 — final hardening, acceptance evidence and runtime verification. Phas
 - **18 screenshots confirmed delivered via Telegram**, credentials/destination outside Git.
 
 ## Current work
-Final source review and authorized main checkpoint push. Functional checks pass; final completion is blocked by the upstream tooling advisory and a live human Telegram exam.
+Source checkpoint **308bec7** was pushed successfully to `origin/main` after source hygiene and staged-diff checks. Functional checks pass; final completion is blocked by the upstream tooling advisory and a live human Telegram exam.
 
 ## Remaining acceptance gates / exact next steps
-1. Finish screenshot delivery and source scan; record commit/push result. Do not publish environment settings.
+1. Screenshot delivery complete: **18 confirmed**. Source scan passed; `308bec7` push confirmed. Keep environment publication under user control.
 2. Track upstream [picomatch PR 194](https://github.com/micromatch/picomatch/pull/194) and [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf). Official advisory JSON was fetched from github/advisory-database (2026/10); affected versions introduced 0, last affected 4.0.7, no fixed event. `npm view picomatch dist-tags` returns latest 4.0.7. Once an audited fixed release is available, update the lockfile within supported ranges, rerun **full** npm audit, build/lint/Vitest/browser suite and push. Do not hide this audit failure or use `--force` to bypass it.
 3. A real human Telegram student must register, answer and confirm finish (also exercise private/image/resume). Current linked destination has no registered StudentProfile or completed attempt. Handler tests use real SQL with mocked Telegram transport; getMe/polling/screenshots do not prove human examination flow.
 4. GitHub CI execution is unverified until observed remotely. Full npm audit is expected to remain red on the current upstream advisory. Production deployment and PostgreSQL load validation are outside current local evidence.
@@ -42,7 +42,7 @@ cd ..
 .venv/bin/python scripts/browser_suite.py
 ```
 
-Browser tests use temporary DB/media/credentials and a unique Celery queue, not the user's DB. Artifacts are outside Git under `/workspace/artifacts/e2e`. Bot token is a runtime binding (`TG_BOT` alias supported); never print/copy it into tracked files. Last pushed main checkpoint: `399c3a7`; current validated improvements await commit. Update this section before interruption or final handoff.
+Browser tests use temporary DB/media/credentials and a unique Celery queue, not the user's DB. Artifacts are outside Git under `/workspace/artifacts/e2e`. Bot token is a runtime binding (`TG_BOT` alias supported); never print/copy it into tracked files. Last verified source checkpoint pushed to main: `308bec7` (100 files, 58 backend + 15 frontend tests). This final progress record is a documentation follow-up. Update this section before interruption or final handoff.
 
 ## Historical implementation journal
 
