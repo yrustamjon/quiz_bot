@@ -191,6 +191,10 @@ try {
     "PASS: stored question/quiz XSS rendered as text, actual offline error/retry recovery, empty and delayed-response loading states. No API mocks.",
   );
 } catch (error) {
+  fs.writeFileSync(
+    `${artifacts}/security-accessibility.json`,
+    JSON.stringify(audits, null, 2),
+  );
   await page
     .screenshot({
       path: `${artifacts}/security-failure.png`,

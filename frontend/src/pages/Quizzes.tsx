@@ -34,7 +34,7 @@ export default function Quizzes() {
   const [access, setAccess] = useState("");
   const [ordering, setOrdering] = useState("-created_at");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(urlParams.get("status") || "");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState(urlParams.has("create"));
   const [busy, setBusy] = useState(false);
@@ -166,13 +166,11 @@ export default function Quizzes() {
               <thead>
                 <tr>
                   <th>Test nomi</th>
-                  <th>Fan</th>
                   {user?.role === "SUPER_ADMIN" && <th>O‘qituvchi</th>}
                   <th>Kirish</th>
                   <th>Qatnashuvchilar</th>
                   <th>Yaratilgan</th>
-                  <th>Savollar</th>
-                  <th>Davomiylik</th>
+                  <th>Savollar / vaqt</th>
                   <th>Holat</th>
                   <th>Amallar</th>
                 </tr>
@@ -181,14 +179,20 @@ export default function Quizzes() {
                 {q.data.results.map((item) => (
                   <tr key={item.id}>
                     <td>
-                      <Link className="table-title" to={"/quizzes/" + item.id}>
+                      <Link
+                        className="table-title"
+                        aria-label={item.title}
+                        to={"/quizzes/" + item.id}
+                      >
                         <span className="mini-icon">
                           <BookOpen size={18} />
                         </span>
-                        {item.title}
+                        <span>
+                          <strong>{item.title}</strong>
+                          <span className="cell-subtitle">{item.subject}</span>
+                        </span>
                       </Link>
                     </td>
-                    <td>{item.subject}</td>
                     {user?.role === "SUPER_ADMIN" && <td>{item.owner_name}</td>}
                     <td>{item.access === "public" ? "Ochiq" : "Kod bilan"}</td>
                     <td>{item.participants}</td>
@@ -198,19 +202,25 @@ export default function Quizzes() {
                       })}
                     </td>
                     <td>
-                      {item.available_questions} / {item.question_count}
+                      <strong>
+                        {item.available_questions} / {item.question_count}
+                      </strong>
+                      <span className="cell-subtitle">
+                        {item.duration_minutes} daqiqa
+                      </span>
                     </td>
-                    <td>{item.duration_minutes} daqiqa</td>
                     <td>
                       <span className={"badge " + item.status}>
                         {labels[item.status]}
                       </span>
                     </td>
                     <td>
-                      <Link className="text-link" to={"/quizzes/" + item.id}>
-                        Ochish <ArrowUpRight size={15} />
-                      </Link>
-                      <QuizActions quiz={item} />
+                      <div className="table-actions">
+                        <Link className="text-link" to={"/quizzes/" + item.id}>
+                          Ochish <ArrowUpRight size={15} />
+                        </Link>
+                        <QuizActions quiz={item} />
+                      </div>
                     </td>
                   </tr>
                 ))}

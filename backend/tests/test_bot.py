@@ -34,7 +34,7 @@ def test_manipulated_callback_does_not_crash():
         answer=AsyncMock(),
         message=message,
     )
-    asyncio.run(callback(c, SimpleNamespace()))
+    asyncio.run(callback(c, SimpleNamespace(set_state=AsyncMock())))
     c.answer.assert_awaited_once()
     message.edit_text.assert_awaited_once()
     message.answer.assert_not_awaited()
@@ -91,7 +91,7 @@ def test_real_exam_services_through_aiogram_callbacks(teacher):
         answer=AsyncMock(),
         message=message,
     )
-    state = SimpleNamespace(get_data=AsyncMock(return_value={}))
+    state = SimpleNamespace(get_data=AsyncMock(return_value={}), set_state=AsyncMock())
     asyncio.run(callback(c, state))
     attempt = Attempt.objects.get(student=student)
     c.data = f"a:{attempt.id.hex}:0:1:0"
@@ -100,7 +100,8 @@ def test_real_exam_services_through_aiogram_callbacks(teacher):
     c.data = "f:" + attempt.id.hex
     asyncio.run(callback(c, state))
     assert any(
-        "TESTNI YAKUNLASH" in str(call) for call in message.edit_text.call_args_list
+        "Testni yakunlaysizmi?" in str(call)
+        for call in message.edit_text.call_args_list
     )
     c.data = "yes:" + attempt.id.hex
     asyncio.run(callback(c, state))
@@ -140,7 +141,12 @@ def test_registration_private_code_and_real_image_service(teacher):
     message.answer_photo = AsyncMock()
     message.from_user = SimpleNamespace(id=6199, username="optional_name")
     message.text = "O‘quvchi Sinovi"
-    state = SimpleNamespace(clear=AsyncMock(), update_data=AsyncMock())
+    state = SimpleNamespace(
+        clear=AsyncMock(),
+        update_data=AsyncMock(),
+        set_state=AsyncMock(),
+        get_data=AsyncMock(return_value={}),
+    )
     asyncio.run(name(message, state))
     assert StudentProfile.objects.filter(telegram_id=6199).count() == 1
     quiz = Quiz.objects.create(
@@ -164,7 +170,8 @@ def test_registration_private_code_and_real_image_service(teacher):
     quiz.refresh_from_db()
     message.text = quiz.access_code.code
     asyncio.run(code(message, state))
-    state.update_data.assert_awaited_with(code=quiz.access_code.code)
+    state.update_data.assert_any_await(code=quiz.access_code.code)
+    state.set_state.assert_awaited_with(None)
     state.get_data = AsyncMock(return_value={"code": quiz.access_code.code})
     c = SimpleNamespace(
         from_user=message.from_user,

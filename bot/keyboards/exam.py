@@ -2,6 +2,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 def keyboard(rows):
+    rows = [row for row in rows if row]
     b = InlineKeyboardBuilder()
     for row in rows:
         for item in row:
@@ -14,9 +15,10 @@ def keyboard(rows):
 def menu():
     return keyboard(
         [
-            [("📝 Testlar", "list:0", "primary"), ("🔑 Test kodi", "code")],
-            [("▶️ Davom etish", "resume"), ("📊 Natijalarim", "results")],
-            [("🏆 Reyting", "ranking"), ("👤 Profil", "profile")],
+            [("📝 Test tanlash", "list:0", "primary")],
+            [("🔑 Kod bilan kirish", "code"), ("▶️ Davom ettirish", "resume")],
+            [("📊 Natijalarim", "results"), ("🏆 Reyting", "ranking")],
+            [("👤 Profilim", "profile")],
         ]
     )
 

@@ -8,7 +8,6 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from apps.attempts import services as engine
-from apps.attempts.scoring import percent_display
 from apps.quizzes.models import Quiz
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ObjectDoesNotExist
@@ -18,7 +17,14 @@ from bot import services
 from bot.keyboards.exam import back_menu, keyboard, menu
 from bot.ui import Panel, panel_lock
 
-from .presentation import continue_exam_proxy, intro, show_attempt, show_result
+from .presentation import (
+    continue_exam_proxy,
+    home_text,
+    intro,
+    result_text,
+    show_attempt,
+    show_result,
+)
 from .registration import Registration
 
 router = Router()
@@ -89,26 +95,36 @@ async def handle_callback(c, state, message):
         if not s:
             await message.answer("Avval /start orqali ro‘yxatdan o‘ting.")
             return
+        if data != "code":
+            # Opening another screen also leaves code entry; keep the private
+            # access code in FSM data for the explicit Start button.
+            await state.set_state(None)
         if data == "resume":
             await continue_exam_proxy(message, tid)
             return
         if data == "menu":
             await state.clear()
             await message.answer(
-                "QUIZ BOT\n\nTest tanlang yoki boshlangan imtihonni davom ettiring.",
+                home_text(s.full_name),
                 reply_markup=menu(),
             )
             return
         if data == "code":
             await state.set_state(Registration.code)
-            await message.answer(
-                "🔑 TEST KODI\n\nO‘qituvchingiz bergan 10 belgili kodni yuboring.\nMasalan: AB12CD34EF",
+            await state.update_data(code=None)
+            prompt = await message.answer(
+                "Kod bilan kirish\n\nO‘qituvchingiz bergan 10 belgili test kodini yozib yuboring.\nMasalan: AB12CD34EF",
                 reply_markup=back_menu(),
             )
+            if isinstance(prompt, Message):
+                await state.update_data(
+                    code_prompt_id=prompt.message_id, code_prompt_chat=prompt.chat.id
+                )
             return
         if data == "profile":
             await message.answer(
-                "👤 PROFIL\n\n" + s.full_name, reply_markup=back_menu()
+                "Profilim\n\n" + s.full_name + "\nO‘quvchi hisobi",
+                reply_markup=back_menu(),
             )
             return
         if parts[0] == "results":
@@ -124,26 +140,10 @@ async def handle_callback(c, state, message):
                 rows.append(navigation)
             rows.append([("‹ Bosh menyu", "menu")])
             if result is None:
-                text = "📊 NATIJALARIM\n\nHali yakunlangan test yo‘q. Testni tugatganingizdan keyin natija shu yerda ko‘rinadi."
-            elif not result.get("released"):
-                text = f"📊 NATIJALARIM · {page + 1}/{total}\n\nNatija saqlandi. O‘qituvchi e’lon qilgach shu yerda ochiladi."
+                text = "Natijalarim\n\nHali yakunlangan test yo‘q. Testni tugatganingizdan keyin natija shu yerda ko‘rinadi."
+                rows.insert(0, [("📝 Test tanlash", "list:0", "primary")])
             else:
-                text = (
-                    f"📊 NATIJALARIM · {page + 1}/{total}\n\n"
-                    + result["title"]
-                    + "\n\n"
-                )
-                for key, label in [
-                    ("earned", "Ball"),
-                    ("maximum", "Maksimum"),
-                    ("percentage", "Natija (%)"),
-                    ("correct", "To‘g‘ri"),
-                    ("incorrect", "Noto‘g‘ri"),
-                    ("unanswered", "Javobsiz"),
-                    ("rank", "Reyting"),
-                ]:
-                    if key in result:
-                        text += f"{label}: {percent_display(result[key]) if key == 'percentage' else result[key]}\n"
+                text = result_text(result, f"Natijalarim · {page + 1}/{total}")
             await message.answer(text[:3800], reply_markup=keyboard(rows))
             return
         if parts[0] == "quizrank":
@@ -166,7 +166,7 @@ async def handle_callback(c, state, message):
         if data == "ranking":
             rows, own = await db(services.student_ranking)(tid)
             await message.answer(
-                "🏆 REYTING\n\n"
+                "Reyting\n\n"
                 + "\n".join(
                     f"{x['rank']}. {x['name']} — {x['percentage']}%" for x in rows
                 )
@@ -180,18 +180,26 @@ async def handle_callback(c, state, message):
             return
         if parts[0] == "list":
             page = max(0, min(10000, int(parts[1])))
-            quizzes = await db(services.public_quizzes)(page)
+            quizzes = await db(services.public_quizzes)(page, tid)
             visible = quizzes[: services.PUBLIC_PAGE_SIZE]
-            text = f"📝 OCHIQ TESTLAR\n{page + 1}-sahifa · Test raqamini tanlang\n"
-            for index, quiz in enumerate(visible, 1):
-                text += f"\n{index}. {quiz.title}\n    {quiz.question_count} savol · {quiz.duration_minutes} daq · {quiz.max_attempts} urinish\n"
+            text = f"Test tanlash\n{page + 1}-sahifa · Quyida test nomini bosing.\n"
             rows = []
-            if visible:
-                rows.append(
-                    [(str(i), f"q:{quiz.pk}") for i, quiz in enumerate(visible, 1)]
+            for index, quiz in enumerate(visible, 1):
+                remaining = max(0, quiz.max_attempts - quiz.used_attempts)
+                availability = (
+                    "Boshlangan · davom ettirish mumkin"
+                    if quiz.active_attempts
+                    else ("Qatnashish mumkin" if remaining else "Urinishlar tugagan")
                 )
-            else:
-                text = "📝 OCHIQ TESTLAR\n\nHozircha ochiq test yo‘q. O‘qituvchingiz kod bergan bo‘lsa, Test kodi bo‘limidan foydalaning."
+                text += (
+                    f"\n{index}. {quiz.title}\n"
+                    f"{quiz.question_count} savol · {quiz.duration_minutes} daqiqa\n"
+                    f"Urinish: {remaining}/{quiz.max_attempts} qoldi · {availability}\n"
+                )
+                label = quiz.title if len(quiz.title) <= 48 else quiz.title[:47] + "…"
+                rows.append([(f"{index}. {label}", f"q:{quiz.pk}:{page}")])
+            if not visible:
+                text = "Hozircha ochiq test yo‘q\n\nO‘qituvchingiz kod bergan bo‘lsa, «Kod bilan kirish»ni tanlang."
             navigation = []
             if page:
                 navigation.append(("← Oldingi", f"list:{page - 1}"))
@@ -199,7 +207,7 @@ async def handle_callback(c, state, message):
                 navigation.append(("Keyingi →", f"list:{page + 1}"))
             if navigation:
                 rows.append(navigation)
-            rows.append([("🔑 Test kodi", "code"), ("‹ Bosh menyu", "menu")])
+            rows.append([("🔑 Kod bilan kirish", "code"), ("‹ Bosh menyu", "menu")])
             await message.answer(text, reply_markup=keyboard(rows))
             return
         if parts[0] in ["q", "s"]:
@@ -207,7 +215,11 @@ async def handle_callback(c, state, message):
             cached = (await state.get_data()).get("code")
             await db(engine.access_quiz)(s, q, cached)
             if parts[0] == "q":
-                await intro(message, q)
+                await intro(
+                    message,
+                    q,
+                    page=max(0, min(10000, int(parts[2]))) if len(parts) > 2 else 0,
+                )
                 return
             a = await db(engine.start)(s, q, cached)
             await show_attempt(message, a, tid)
@@ -227,7 +239,7 @@ async def handle_callback(c, state, message):
                 await show_result(message, a, tid)
                 return
             await message.answer(
-                f"TESTNI YAKUNLASH\n\n{answered}/{total} javob saqlangan.\n{total - answered} ta savol javobsiz — ularga 0 ball.\n\nYakunlangandan keyin javoblar o‘zgarmaydi.\nDavom etasizmi yoki yakunlaysizmi?",
+                f"Testni yakunlaysizmi?\n\n{answered}/{total} savolga javob saqlangan.\nJavobsiz: {total - answered} ta — ularga 0 ball beriladi.\n\nYakunlagach javoblarni o‘zgartirib bo‘lmaydi.",
                 reply_markup=keyboard(
                     [
                         [
@@ -242,7 +254,13 @@ async def handle_callback(c, state, message):
             await show_result(message, a, tid)
     except (APIException, ObjectDoesNotExist, ValueError, IndexError):
         await message.answer(
-            "Amal eskirgan, muddat tugagan yoki ruxsat yo‘q. /continue orqali davom eting."
+            "Bu amal hozir bajarilmaydi\n\nTest muddati, kirish ruxsati yoki tugma eskirgan bo‘lishi mumkin. Boshlangan testga «Davom ettirish» orqali qayting.",
+            reply_markup=keyboard(
+                [
+                    [("▶️ Davom ettirish", "resume", "primary")],
+                    [("‹ Bosh menyu", "menu")],
+                ]
+            ),
         )
 
 

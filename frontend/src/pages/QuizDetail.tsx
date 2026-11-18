@@ -81,19 +81,33 @@ export default function QuizDetail() {
         </p>
       )}
       <div
-        className="actions"
-        style={{ marginBottom: 24 }}
+        className="wizard-steps"
         role="group"
         aria-label="Test yaratish bosqichlari"
       >
         {["Asosiy sozlamalar", "Savollar", "Nashr qilish"].map((label, i) => (
           <Button
             key={label}
+            aria-label={`${i + 1}. ${label}`}
             aria-pressed={step === i + 1}
             variant={step === i + 1 ? "default" : "outline"}
             onClick={() => move(i + 1)}
           >
-            {i + 1}. {label}
+            <span className="step-number" aria-hidden="true">
+              {i + 1}
+            </span>
+            <span className="step-copy">
+              <strong>{label}</strong>
+              <small>
+                {
+                  [
+                    "Nom, vaqt va kirish",
+                    "Savollar banki va import",
+                    "Natijalar va nashr",
+                  ][i]
+                }
+              </small>
+            </span>
           </Button>
         ))}
       </div>

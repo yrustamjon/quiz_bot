@@ -112,6 +112,7 @@ await page.getByLabel("Sinov O‘quvchi", { exact: true }).check();
 await page.getByRole("button", { name: "Saqlash", exact: true }).click();
 await page.getByRole("heading", { name: "Matematika guruhi" }).waitFor();
 await page.getByText("1 o‘quvchi", { exact: true }).waitFor();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/groups-light.png`,
   fullPage: true,
@@ -203,8 +204,12 @@ await page.waitForFunction(
     ).length === 1,
 );
 await page.goto(`${baseURL}/quizzes`);
-await page.getByRole("link",{name:"Wizard brauzer sinovi",exact:true}).click();
-await page.getByRole("heading",{name:"Wizard brauzer sinovi",exact:true}).waitFor();
+await page
+  .getByRole("link", { name: "Wizard brauzer sinovi", exact: true })
+  .click();
+await page
+  .getByRole("heading", { name: "Wizard brauzer sinovi", exact: true })
+  .waitFor();
 await page.getByRole("button", { name: "2. Savollar", exact: true }).click();
 await page
   .locator(".section-heading")
@@ -259,6 +264,7 @@ await page.getByRole("link", { name: "Sinov O‘quvchi" }).click();
 await page
   .getByRole("heading", { name: "Sinov O‘quvchi", exact: true })
   .waitFor();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/student-detail-light.png`,
   fullPage: true,
@@ -267,6 +273,7 @@ await page.goto(baseURL + "/results");
 await page.getByRole("button", { name: "Sinov O‘quvchi" }).click();
 await page.getByRole("dialog", { name: "Natija tafsilotlari" }).waitFor();
 await page.getByText("To‘g‘ri javob: 4", { exact: true }).waitFor();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/result-detail-light.png`,
   fullPage: true,
@@ -328,6 +335,7 @@ for (const theme of ["light", "dark"])
         throw new Error("Overflow " + route + " " + width);
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.evaluate(() => window.scrollTo(0, 0));
     await page.screenshot({
       path: `${artifactDir}/${route}-${theme}-expanded.png`,
       fullPage: true,

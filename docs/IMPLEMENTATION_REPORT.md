@@ -26,7 +26,9 @@ Endpoint va ishga tushirish tafsilotlari [README API jadvali](../README.md#api-o
 
 ## E. UI
 
-Light/Dark, dastlabki tizim mavzusi, 7 ekran kengligi, mobil menyu, account dropdown, klaviatura bilan ishlaydigan Radix dialoglar, loading/empty/error holatlari, Uzbek validatsiya, haqiqiy import preview jadvali va rasmlar, hisobot navbati/yuklash mavjud.
+Yangilangan navy/indigo dizayn, Light/Dark, dastlabki tizim mavzusi, 7 ekran kengligi, guruhlangan navigatsiya, mobil menyu, account dropdown, klaviatura bilan ishlaydigan Radix dialoglar, loading/empty/error holatlari, Uzbek validatsiya, haqiqiy import preview jadvali va rasmlar, hisobot navbati/yuklash mavjud.
+
+Dashboard asosiy amallar, ixcham ko‘rsatkichlar, haqiqiy kunlik faollik va so‘nggi test/natijalarni ko‘rsatadi. Grafik alohida yuklanadi; holat kartalari test filtriga olib boradi. Mavzu almashganda tugma kontrasti saqlanadi. Testlar jadvalida bog‘liq ma’lumotlar birlashtirilgan, uch bosqichli wizard va natija sozlamalari aniqroq ko‘rinadi.
 
 Wizard tahrirlarni bosqichlar orasida saqlaydi; saqlanmagan sozlama bilan nashr qilish bloklanadi. Muhim formalarda havola va brauzer Back/Forward navigatsiyasi tasdiqlash orqali boshqariladi, tabni yopish uchun brauzer himoyasi ishlaydi. O‘chirish/cheklash kabi amallar tasdiqlanadi. Rasm bilan savol yaratish bitta API so‘roviga birlashtirilgan, yaroqsiz rasm alohida bo‘sh savol yaratmaydi.
 
@@ -36,7 +38,7 @@ Ro‘yxatdan o‘tish, ochiq/yopiq testlar, kodni tekshirish, imtihon boshlash, 
 
 Haqiqiy Telegram API ulanishi, polling va screenshot yuborish tekshirildi. Bot handler testlari haqiqiy SQL servislarini, test Telegram transportini ishlatadi. **Haqiqiy odam Telegramda ro‘yxatdan o‘tib imtihonni tugatgani hali tasdiqlanmagan.** Bot tokeni yoki chat identifikatori bu hisobotda yo‘q.
 
-Telegram UX yangilandi: 3 qatorli menyu, 5 tadan test, bitta xabar ichida sahifalash, bir natijali tarix, savol/javob progressi va native rangli boshqaruvlar. Bir xil tez bosishlar takroriy edit yubormaydi. Rasm file-ID orqali qayta ishlatiladi, eski ID rad etilsa asl rasm qayta yuklanadi. Eski/o‘chirilgan xabarda xavfsiz fallback bor. API cheklovi sabab juda uzun yoki photo-to-text holatlarida alohida davomiy xabar kerak bo‘lishi mumkin.
+Telegram UX qayta tartiblandi: «Test tanlash» asosiy amal, barcha 6 bo‘lim saqlangan. Ro‘yxatda 4 tadan test, nomi yozilgan tanlash tugmalari, foydalanuvchining qolgan/ruxsat etilgan urinishlari va mavjudlik holati ko‘rsatiladi. Bitta xabar ichida sahifalash, bir natijali tarix, savol/javob progressi va native rangli boshqaruvlar ishlaydi. Matnlar tabiiy Uzbekcha sarlavhalar bilan qisqartirildi; kirish shartlari va yakunlash tasdig‘i ajratildi. To‘g‘ri koddan keyin input holati yopiladi, kod Start amali uchun saqlanadi. Xato kod faqat shu suhbatdagi bot promptini yangilaydi; boshqa suhbat yoki o‘quvchi xabari tahrirlanmaydi. /help amaliy yo‘riqnoma beradi. Bir xil tez bosishlar takroriy edit yubormaydi. Rasm file-ID orqali qayta ishlatiladi, eski ID rad etilsa asl rasm qayta yuklanadi. Eski/o‘chirilgan xabarda xavfsiz fallback bor. API cheklovi sabab juda uzun yoki photo-to-text holatlarida alohida davomiy xabar kerak bo‘lishi mumkin.
 
 Foydalanuvchi rasmlar lokal muhitdan ekanini aniqlashtirdi. Bir token bilan ikki poller ishlamasligi uchun cloud sinov polleri xavfsiz to‘xtatildi; screenshot yuborish imkoniyati saqlanadi. Yangi kod lokalda pull/restart qilingach ko‘rinadi; lokal real javob tezligi hali o‘lchanmagan. @QuizBot ichki suhbat ekranlari bu muhitda tekshirilmagan.
 
@@ -52,12 +54,12 @@ DRF/Pillow audit topilmalari yangilash orqali bartaraf etildi. Pinned Python loc
 
 ## H. Tekshiruv va acceptance xaritasi
 
-- Backend: **77 pytest passed**; concurrency, ruxsat, autentifikatsiya, parser/raster, muddat, callback, reyting va hisobot tekshiruvlari bilan.
+- Backend: **81 pytest passed**; concurrency, ruxsat, autentifikatsiya, parser/raster, muddat, callback, reyting va hisobot tekshiruvlari bilan.
 - Frontend: **15 Vitest passed**; strict TypeScript build va ESLint zero warnings.
 - Django `check`, `check --deploy`, `makemigrations --check --dry-run`: muammosiz. `pip check`: muammosiz.
 - Haqiqiy Redis FSM write/reconnect/read/cleanup: o‘tdi; faqat ajratilgan kalitlar ishlatilgan.
 - Alohida Celery worker + ajratilgan SQL/media bilan background XLSX navbati, tayyor statusi va authenticated download brauzerda tekshirildi.
-- Eng oxirgi yakunlangan kengaytirilgan axe tekshiruvi: **50 sahifa/oyna/holat/mavzu kombinatsiyasi, 0 violation**. Oxirgi router/form o‘zgarishidan keyingi integration/management/axe rerunlari ham o‘tdi.
+- Yangi dizayndan keyingi kengaytirilgan axe tekshiruvi: **50 sahifa/oyna/holat/mavzu kombinatsiyasi, 0 violation**. Oxirgi router/form o‘zgarishidan keyingi integration/management/axe rerunlari ham o‘tdi.
 
 | Ssenariy | Dalil va holat |
 |---|---|
@@ -78,11 +80,13 @@ DRF/Pillow audit topilmalari yangilash orqali bartaraf etildi. Pinned Python loc
 | O — Rankings | Best attempt/average/time tie/student-ID tartibi va scope testlari, o‘tdi |
 | P — XLSX report | To‘rt real hisobot, scope va background download, o‘tdi |
 | Q — Security | Auth/CSRF/ID/callback/code/archive/raster/size negative tests, o‘tdi |
-| R — UI quality | Light/Dark, 7 width, klaviatura, CRUD/import/export va axe, o‘tdi; router Back/link tasdiqlash va bekor qilish ham tekshirildi |
+| R — UI quality | Yangi dizayn: Light/Dark, 7 width, klaviatura, CRUD/import/export va axe, o‘tdi; router Back/link tasdiqlash va bekor qilish ham tekshirildi |
 
 Test dalillari `/workspace/artifacts` va `/workspace/artifacts/e2e`da; ular manba kodiga qo‘shilmagan. Screenshotlarda alohida test bazasi ma’lumotlari ishlatilgan.
 
 ## I. Cheklovlar va tashqi to‘siqlar
+
+Dizaynning foydalanuvchiga yoqishi avtomatik test bilan tasdiqlanmaydi; yangi ko‘rinish rasmlari ko‘rib chiqish uchun yuborilgan. Lokal Telegram oynasiga bu muhitdan kirish imkoni yo‘q.
 
 Jonli inson Telegram imtihoni yakunlanmaguncha barcha acceptance ssenariylari to‘liq yopilgan deb hisoblanmaydi. Bot foydalanuvchi tugmalarini inson nomidan bosa olmaydi.
 

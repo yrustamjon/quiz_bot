@@ -40,6 +40,7 @@ await page
   .getByRole("button", { name: "Yopish", exact: true })
   .first()
   .click();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/teachers-light.png`,
   fullPage: true,
@@ -71,13 +72,16 @@ await page.getByLabel("Savollar soni").fill("1");
 await page
   .getByRole("button", { name: "Qoralamani yaratish", exact: true })
   .click();
-await page.getByRole("heading", { name: "Excel integratsiyasi",exact:true }).waitFor();
+await page
+  .getByRole("heading", { name: "Excel integratsiyasi", exact: true })
+  .waitFor();
 await page.getByRole("button", { name: "2. Savollar" }).click();
 await page.getByRole("button", { name: "Excel importi", exact: true }).click();
 await page
   .getByLabel("Import fayli")
   .setInputFiles(`${artifactDir}/template.xlsx`);
 await page.getByRole("heading", { name: "1 ta savol" }).waitFor();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/import-preview-light.png`,
   fullPage: true,
@@ -88,6 +92,7 @@ await page.keyboard.press("Escape");
 await page.getByRole("button", { name: "3. Nashr qilish" }).click();
 await page.getByRole("button", { name: "Nashr qilish", exact: true }).click();
 await page.getByRole("button", { name: "Testni yopish" }).waitFor();
+await page.evaluate(() => window.scrollTo(0, 0));
 await page.screenshot({
   path: `${artifactDir}/quiz-published-light.png`,
   fullPage: true,
@@ -111,6 +116,7 @@ for (const route of [
     )
       throw new Error("overflow " + route + " " + width);
   }
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: `${artifactDir}/` + route + "-light.png",
     fullPage: true,

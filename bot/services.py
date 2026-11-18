@@ -20,15 +20,28 @@ def student(tid):
     return StudentProfile.objects.filter(telegram_id=tid, is_active=True).first()
 
 
-PUBLIC_PAGE_SIZE = 5
+PUBLIC_PAGE_SIZE = 4
 
 
-def public_quizzes(page=0):
+def public_quizzes(page=0, tid=None):
     now = timezone.now()
     return list(
         Quiz.objects.filter(status="published", access="public")
         .filter(Q(opens_at__isnull=True) | Q(opens_at__lte=now))
         .filter(Q(closes_at__isnull=True) | Q(closes_at__gt=now))
+        .annotate(
+            used_attempts=Count(
+                "attempts", filter=Q(attempts__student__telegram_id=tid)
+            ),
+            active_attempts=Count(
+                "attempts",
+                filter=Q(
+                    attempts__student__telegram_id=tid,
+                    attempts__status="in_progress",
+                    attempts__deadline__gt=now,
+                ),
+            ),
+        )
         .order_by("id")[
             page * PUBLIC_PAGE_SIZE : page * PUBLIC_PAGE_SIZE + PUBLIC_PAGE_SIZE + 1
         ]

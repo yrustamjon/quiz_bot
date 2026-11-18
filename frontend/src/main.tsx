@@ -16,6 +16,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider } from "./services/auth";
 import { Loading } from "./components/states";
 import "./style.css";
+import "./design.css";
 const Auth = lazy(() => import("./pages/Auth"));
 const Shell = lazy(() => import("./layouts/Shell"));
 const Quizzes = lazy(() => import("./pages/Quizzes"));

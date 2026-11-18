@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 import { Link } from "react-router-dom";
 import type { User } from "../services/api";
@@ -10,8 +11,22 @@ export function AccountMenu({
 }) {
   return (
     <Dropdown.Root>
-      <Dropdown.Trigger className="avatar icon" aria-label="Hisob menyusi">
-        {(user.full_name || user.username).slice(0, 1).toUpperCase()}
+      <Dropdown.Trigger className="account-trigger" aria-label="Hisob menyusi">
+        <span className="avatar">
+          {(user.full_name || user.username)
+            .split(" ")
+            .slice(0, 2)
+            .map((word) => word.slice(0, 1))
+            .join("")
+            .toUpperCase()}
+        </span>
+        <span className="account-identity">
+          <strong>{user.full_name || user.username}</strong>
+          <small>
+            {user.role === "SUPER_ADMIN" ? "Administrator" : "O‘qituvchi"}
+          </small>
+        </span>
+        <ChevronDown size={14} className="account-chevron" />
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content className="account-menu" sideOffset={10} align="end">

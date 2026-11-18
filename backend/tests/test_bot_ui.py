@@ -39,9 +39,9 @@ def event(panel, data):
     )
 
 
-def test_menu_keeps_all_six_features_in_three_rows():
+def test_menu_gives_test_selection_priority_and_keeps_all_six_features():
     rows = menu().inline_keyboard
-    assert [len(row) for row in rows] == [2, 2, 2]
+    assert [len(row) for row in rows] == [1, 2, 2, 1]
     assert {b.callback_data for row in rows for b in row} == {
         "list:0",
         "code",
@@ -96,20 +96,26 @@ def test_public_pagination_edits_one_panel_and_caps_controls(teacher):
             owner=teacher, title=f"Quiz {i:02}", subject="Fan", status="published"
         )
     panel = message()
-    state = SimpleNamespace(clear=AsyncMock())
+    state = SimpleNamespace(clear=AsyncMock(), set_state=AsyncMock())
     c = event(panel, "list:0")
     asyncio.run(callback(c, state))
     panel.edit_text.assert_awaited_once()
     panel.answer.assert_not_awaited()
     first = panel.edit_text.call_args
-    assert "Quiz 00" in first.args[0] and "Quiz 05" not in first.args[0]
+    assert "Quiz 00" in first.args[0] and "Quiz 04" not in first.args[0]
     rows = first.kwargs["reply_markup"].inline_keyboard
-    assert [button.text for button in rows[0]] == ["1", "2", "3", "4", "5"]
-    assert len(rows) <= 3
+    assert [row[0].text for row in rows[:4]] == [
+        f"{i + 1}. Quiz {i:02}" for i in range(4)
+    ]
+    assert rows[0][0].callback_data.startswith("q:")
+    assert rows[0][0].callback_data.endswith(":0")
+    assert "10 savol · 30 daqiqa" in first.args[0]
+    assert "1/1 qoldi · Qatnashish mumkin" in first.args[0]
+    assert len(rows) <= 6
     c.data = "list:1"
     asyncio.run(callback(c, state))
     second = panel.edit_text.call_args
-    assert "Quiz 05" in second.args[0] and "Quiz 00" not in second.args[0]
+    assert "Quiz 04" in second.args[0] and "Quiz 00" not in second.args[0]
     assert panel.edit_text.await_count == 2
     panel.answer.assert_not_awaited()
 
@@ -134,7 +140,8 @@ def test_callback_acknowledgement_does_not_delay_rendering():
         c = event(panel, "menu")
         c.answer.side_effect = acknowledge
         await asyncio.wait_for(
-            callback(c, SimpleNamespace(clear=AsyncMock())), timeout=5
+            callback(c, SimpleNamespace(clear=AsyncMock(), set_state=AsyncMock())),
+            timeout=5,
         )
 
     asyncio.run(journey())
@@ -163,7 +170,9 @@ def test_result_history_is_one_paginated_panel_instead_of_a_message_burst(teache
             percentage=i,
         )
     panel = message()
-    asyncio.run(callback(event(panel, "results"), SimpleNamespace()))
+    asyncio.run(
+        callback(event(panel, "results"), SimpleNamespace(set_state=AsyncMock()))
+    )
     panel.edit_text.assert_awaited_once()
     panel.answer.assert_not_awaited()
     text = panel.edit_text.call_args.args[0]
@@ -268,16 +277,215 @@ def test_rapid_repeated_taps_share_updated_panel_and_do_not_repeat_edit():
         message_id=15,
         date=timezone.now(),
         chat=Chat(id=8131, type="private"),
-        text="QUIZ BOT\n\nTest tanlang yoki boshlangan imtihonni davom ettiring.",
+        text="Salom, Rapid!\n\nYangi test uchun «Test tanlash»ni bosing.\nO‘qituvchingiz kod bergan bo‘lsa, «Kod bilan kirish»ni tanlang.",
         reply_markup=menu(),
     )
 
     async def taps():
         await asyncio.gather(
-            callback(event(panel, "menu"), SimpleNamespace(clear=AsyncMock())),
-            callback(event(panel, "menu"), SimpleNamespace(clear=AsyncMock())),
+            callback(
+                event(panel, "menu"),
+                SimpleNamespace(clear=AsyncMock(), set_state=AsyncMock()),
+            ),
+            callback(
+                event(panel, "menu"),
+                SimpleNamespace(clear=AsyncMock(), set_state=AsyncMock()),
+            ),
         )
 
     asyncio.run(taps())
     panel.edit_text.assert_awaited_once()
     panel.answer.assert_not_awaited()
+
+
+def test_catalog_remaining_attempts_are_scoped_and_active_attempt_can_resume(teacher):
+    from datetime import timedelta
+
+    own = StudentProfile.objects.create(telegram_id=8131, full_name="Catalog Student")
+    other = StudentProfile.objects.create(telegram_id=8132, full_name="Other Student")
+    quiz = Quiz.objects.create(
+        owner=teacher, title="Own limit", subject="Fan", status="published"
+    )
+    now = timezone.now()
+    for person, status in [(own, "in_progress"), (other, "completed")]:
+        Attempt.objects.create(
+            quiz=quiz,
+            student=person,
+            number=1,
+            status=status,
+            navigation="free",
+            started_at=now,
+            deadline=now + timedelta(minutes=10),
+        )
+    panel = message()
+    asyncio.run(
+        callback(event(panel, "list:0"), SimpleNamespace(set_state=AsyncMock()))
+    )
+    text = panel.edit_text.call_args.args[0]
+    assert "0/1 qoldi · Boshlangan · davom ettirish mumkin" in text
+    Attempt.objects.filter(student=own).update(status="completed", finished_at=now)
+    asyncio.run(
+        callback(event(panel, "list:0"), SimpleNamespace(set_state=AsyncMock()))
+    )
+    assert "0/1 qoldi · Urinishlar tugagan" in panel.edit_text.call_args.args[0]
+
+
+def test_new_result_layout_never_invents_hidden_fields_or_unreleased_answers():
+    from bot.handlers.presentation import result_text
+
+    text = result_text({"released": True, "title": "Hidden score", "unanswered": 2})
+    assert "Hidden score" in text and "Javobsiz: 2" in text
+    assert "Ball:" not in text and "%" not in text and "To‘g‘ri:" not in text
+    hidden = result_text(
+        {
+            "released": False,
+            "title": "PRIVATE",
+            "percentage": 99,
+            "questions": [{"text": "SECRET"}],
+        },
+        details=True,
+    )
+    assert all(value not in hidden for value in ["PRIVATE", "99", "SECRET"])
+    full = result_text(
+        {
+            "released": True,
+            "title": "Visible",
+            "earned": 7,
+            "maximum": 10,
+            "percentage": 70,
+            "correct": 7,
+            "questions": [
+                {"text": "2+2", "options": ["3", "4"], "correct": 1, "selected": 0}
+            ],
+        },
+        details=True,
+    )
+    assert "70.00%" in full and "Ball: 7 / 10" in full
+    assert "Sizning javobingiz: 3" in full and "To‘g‘ri javob: 4" in full
+
+
+def test_code_flow_updates_own_prompt_and_exits_input_state_on_success(teacher):
+    from unittest.mock import patch
+
+    from aiogram import Bot
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.storage.base import StorageKey
+    from aiogram.fsm.storage.memory import MemoryStorage
+    from aiogram.methods import EditMessageText
+    from aiogram.types import Chat, User
+    from apps.questions.models import Question, QuizQuestion
+    from apps.quizzes.services import transition
+
+    from bot.handlers.registration import Registration, code, continue_exam
+
+    StudentProfile.objects.create(telegram_id=9924, full_name="Code Student")
+    quiz = Quiz.objects.create(
+        owner=teacher,
+        title="Private exam",
+        subject="Fan",
+        access="private",
+        question_count=1,
+    )
+    question = Question.objects.create(
+        owner=teacher, text="2+2?", options=["1", "2", "3", "4"], correct_option=3
+    )
+    QuizQuestion.objects.create(quiz=quiz, question=question, position=0)
+    transition(quiz, "published")
+    quiz.refresh_from_db()
+    access_code = quiz.access_code.code
+
+    async def journey():
+        bot = Bot("123456:test-only")
+        storage = MemoryStorage()
+        state = FSMContext(
+            storage, StorageKey(bot_id=bot.id, chat_id=9924, user_id=9924)
+        )
+        await state.set_state(Registration.code)
+        await state.update_data(code_prompt_id=40, code_prompt_chat=9924)
+        chat = Chat(id=9924, type="private")
+        returned = Message(message_id=40, date=timezone.now(), chat=chat)
+        base = {
+            "message_id": 41,
+            "date": timezone.now(),
+            "chat": chat,
+            "from_user": User(id=9924, is_bot=False, first_name="Code"),
+        }
+        with patch.object(
+            bot.session, "make_request", new=AsyncMock(return_value=returned)
+        ) as transport:
+            await code(Message(**base, text="WRONG").as_(bot), state)
+            assert await state.get_state() == Registration.code.state
+            first = transport.call_args.args[1]
+            assert isinstance(first, EditMessageText) and first.message_id == 40
+            assert "Kod topilmadi" in first.text
+            # Choosing a different screen must leave code entry without
+            # consuming the next ordinary message as another access code.
+            await callback(
+                SimpleNamespace(
+                    message=returned.as_(bot),
+                    from_user=base["from_user"],
+                    data="results",
+                    answer=AsyncMock(),
+                ),
+                state,
+            )
+            assert await state.get_state() is None
+            await state.set_state(Registration.code)
+            await code(Message(**base, text=access_code.lower()).as_(bot), state)
+            assert await state.get_state() is None
+            assert (await state.get_data())["code"] == access_code
+            last = transport.call_args.args[1]
+            assert last.message_id == 40 and last.chat_id == 9924
+            assert "Private exam" in last.text
+            callbacks = {
+                b.callback_data
+                for row in last.reply_markup.inline_keyboard
+                for b in row
+            }
+            assert f"s:{quiz.pk}" in callbacks
+            assert not any(value.startswith("list:") for value in callbacks)
+            assert all(
+                isinstance(call.args[1], EditMessageText)
+                and call.args[1].message_id != 41
+                for call in transport.call_args_list
+            )
+            await state.set_state(Registration.code)
+            await continue_exam(Message(**base, text="/continue").as_(bot), state)
+            assert await state.get_state() is None
+            assert (await state.get_data())["code"] == access_code
+        await storage.close()
+        await bot.session.close()
+
+    asyncio.run(journey())
+
+
+def test_code_prompt_cannot_target_another_chat():
+    from unittest.mock import patch
+
+    from aiogram import Bot
+    from aiogram.methods import SendMessage
+    from aiogram.types import Chat, User
+
+    from bot.handlers.registration import code
+
+    async def journey():
+        bot = Bot("123456:test-only")
+        incoming = Message(
+            message_id=71,
+            date=timezone.now(),
+            chat=Chat(id=9925, type="private"),
+            from_user=User(id=9925, is_bot=False, first_name="Code"),
+            text="bad",
+        ).as_(bot)
+        state = SimpleNamespace(
+            get_data=AsyncMock(
+                return_value={"code_prompt_id": 40, "code_prompt_chat": 9999}
+            )
+        )
+        with patch.object(bot.session, "make_request", new=AsyncMock()) as transport:
+            await code(incoming, state)
+            sent = transport.call_args.args[1]
+            assert isinstance(sent, SendMessage) and sent.chat_id == 9925
+        await bot.session.close()
+
+    asyncio.run(journey())

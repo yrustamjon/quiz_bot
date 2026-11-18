@@ -7,41 +7,72 @@ from apps.attempts.scoring import percent_display
 from asgiref.sync import sync_to_async
 
 from bot import services
-from bot.keyboards.exam import back_menu, keyboard, menu, question_keyboard
+from bot.keyboards.exam import keyboard, question_keyboard
 from bot.ui import text_chunks, text_entities
 
 db = sync_to_async
 
 
+def home_text(full_name):
+    return (
+        f"Salom, {full_name.split()[0]}!\n\n"
+        "Yangi test uchun «Test tanlash»ni bosing.\n"
+        "O‘qituvchingiz kod bergan bo‘lsa, «Kod bilan kirish»ni tanlang."
+    )
+
+
+def result_text(data, heading="Natijangiz", details=False):
+    if not data["released"]:
+        return f"{heading}\n\nNatijangiz saqlandi. O‘qituvchi e’lon qilgach shu yerda ko‘rinadi."
+    lines = [heading, "", data["title"], ""]
+    if "percentage" in data:
+        lines.append(f"Natija: {percent_display(data['percentage'])}%")
+    if "earned" in data and "maximum" in data:
+        lines.append(f"Ball: {data['earned']} / {data['maximum']}")
+    counts = [
+        f"{label}: {data[key]}"
+        for key, label in [
+            ("correct", "To‘g‘ri"),
+            ("incorrect", "Xato"),
+            ("unanswered", "Javobsiz"),
+        ]
+        if key in data
+    ]
+    if counts:
+        lines.extend(["", "  ·  ".join(counts)])
+    if "rank" in data:
+        lines.extend(
+            [
+                "",
+                f"Reytingdagi o‘rningiz: {data['rank'] or '—'}",
+                "Yangi natijalar bilan o‘rin o‘zgarishi mumkin.",
+            ]
+        )
+    if details and data.get("questions"):
+        lines.extend(["", "Javoblar tahlili"])
+        for i, q in enumerate(data["questions"], 1):
+            selected = (
+                q["options"][q["selected"]]
+                if q["selected"] is not None
+                else "Javob berilmagan"
+            )
+            lines.extend(
+                [
+                    f"\n{i}. {q['text']}",
+                    f"Sizning javobingiz: {selected}",
+                    f"To‘g‘ri javob: {q['options'][q['correct']]}",
+                ]
+            )
+    return "\n".join(lines)
+
+
 async def show_result(message, a, tid):
     data = await db(engine.student_result)(a, tid)
-    if not data["released"]:
-        await message.answer(
-            "Natijangiz saqlandi. Natijalar keyinroq e’lon qilinadi.",
-            reply_markup=menu(),
-        )
-        return
-    lines = ["Test yakunlandi!", data["title"]]
-    for key, label in [
-        ("earned", "Ball"),
-        ("maximum", "Maksimum"),
-        ("percentage", "Natija (%)"),
-        ("correct", "To‘g‘ri"),
-        ("incorrect", "Noto‘g‘ri"),
-        ("unanswered", "Javobsiz"),
-        ("rank", "Reyting (o‘zgarishi mumkin)"),
-    ]:
-        if key in data:
-            lines.append(
-                f"{label}: {percent_display(data[key]) if key == 'percentage' else data[key]}"
-            )
-    if data.get("questions"):
-        for q in data["questions"]:
-            lines.append(q["text"] + " — " + q["options"][q["correct"]])
-    text = "\n".join(lines)
+    text = result_text(data, "Test yakunlandi", details=True)
     rows = []
     if "rank" in data:
         rows.append([("Reytingni ko‘rish", f"quizrank:{a.quiz_id}")])
+    rows.append([("📊 Natijalarim", "results"), ("📝 Test tanlash", "list:0")])
     rows.append([("Bosh menyu", "menu")])
     chunks = list(text_chunks(text))
     for i, chunk in enumerate(chunks):
@@ -123,23 +154,31 @@ async def show_attempt(message, a, tid):
         )
 
 
-async def intro(message, q):
+async def intro(message, q, page=0):
     text = (
-        f"📝 {q.title}\n{q.subject}\n\nSavollar: {q.question_count}  ·  Vaqt: {q.duration_minutes} daqiqa\nUrinishlar: {q.max_attempts}  ·  {'Ketma-ket' if q.navigation == 'sequential' else 'Erkin'} rejim\n\n⏱ Vaqt test boshlangandan keyin to‘xtamaydi.\nJavoblar saqlanadi. Javobsiz savollar — 0 ball.\n"
+        f"{q.title}\n{q.subject}\n\n"
+        f"{q.question_count} savol  ·  {q.duration_minutes} daqiqa\n"
+        f"Ruxsat etilgan urinishlar: {q.max_attempts}\n\n"
+        "Boshlashdan oldin\n"
+        "• Vaqt boshlanganidan keyin to‘xtamaydi.\n"
+        "• Javoblaringiz avtomatik saqlanadi.\n"
+        "• Javobsiz savolga 0 ball beriladi.\n"
         + (
-            "Oldingi javobni o‘zgartirib bo‘lmaydi.\n"
+            "• Savollar ketma-ket beriladi; oldingi javob o‘zgarmaydi."
             if q.navigation == "sequential"
-            else "Vaqt tugaguncha javobni o‘zgartirishingiz mumkin.\n"
+            else "• Savollar orasida o‘tish va javobni o‘zgartirish mumkin."
         )
-        + "Yakunlashdan oldin tasdiqlash so‘raladi."
     )
     await message.answer(
         text,
         entities=text_entities(text),
         reply_markup=keyboard(
             [
-                [("▶️ Boshlash", f"s:{q.pk}", "success")],
-                [("‹ Testlar", "list:0"), ("Bosh menyu", "menu")],
+                [("▶️ Testni boshlash", f"s:{q.pk}", "success")],
+                [("‹ Testlarga qaytish", f"list:{page}")]
+                if q.access == "public"
+                else [],
+                [("Bosh menyu", "menu")],
             ]
         ),
     )
@@ -151,6 +190,8 @@ async def continue_exam_proxy(message, tid):
         await show_attempt(message, a, tid)
     else:
         await message.answer(
-            "▶️ DAVOM ETTIRISH\n\nFaol test yo‘q. Yangi test tanlashingiz mumkin.",
-            reply_markup=back_menu(),
+            "Boshlangan test yo‘q\n\nTestni boshlasangiz, shu bo‘lim orqali unga qaytishingiz mumkin.",
+            reply_markup=keyboard(
+                [[("📝 Test tanlash", "list:0", "primary")], [("‹ Bosh menyu", "menu")]]
+            ),
         )

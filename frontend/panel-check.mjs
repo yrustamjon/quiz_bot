@@ -19,6 +19,17 @@ await page.getByRole("button", { name: "Hisobga kirish", exact: true }).click();
 await page
   .getByRole("heading", { name: "Xush kelibsiz, Interfeys" })
   .waitFor({ timeout: 15000 });
+await page.locator(".stat-grid .stat").first().waitFor();
+await page.getByRole("img", { name: "Kunlik urinishlar grafigi" }).waitFor();
+await page
+  .getByText("Hisobga kirildi.", { exact: true })
+  .waitFor({ state: "hidden" });
+await page
+  .getByRole("button", { name: "Menyuni yig‘ish", exact: true })
+  .click();
+await page
+  .getByRole("button", { name: "Menyuni kengaytirish", exact: true })
+  .click();
 await page.screenshot({
   path: `${artifactDir}/dashboard-light.png`,
   fullPage: true,
@@ -28,6 +39,37 @@ await page.screenshot({
   path: `${artifactDir}/dashboard-dark.png`,
   fullPage: true,
 });
+await page.getByRole("button", { name: "Excel importi", exact: true }).click();
+await page
+  .getByRole("dialog", { name: "Excel importi", exact: true })
+  .waitFor();
+await page.keyboard.press("Escape");
+await page.getByRole("link", { name: "Test yaratish", exact: true }).click();
+await page.getByRole("dialog").waitFor();
+await page.keyboard.press("Escape");
+await page.goto(baseURL + "/");
+await page
+  .getByRole("heading", { name: "Umumiy ko‘rsatkichlar", exact: true })
+  .waitFor();
+await page.locator(".status-legend a[href='/quizzes?status=draft']").click();
+if (
+  (await page.getByLabel("Test holati", { exact: true }).inputValue()) !==
+  "draft"
+)
+  throw new Error("Dashboard status link did not apply quiz filter");
+await page.goto(baseURL + "/");
+await page.getByText("Sana oralig‘i", { exact: true }).click();
+const dateRequest = page.waitForResponse(
+  (response) =>
+    response.url().includes("dashboard/summary/") &&
+    response.url().includes("start=2020-01-01") &&
+    response.status() === 200,
+);
+await page.getByLabel("Sanadan", { exact: true }).fill("2020-01-01");
+await dateRequest;
+await page.getByRole("button", { name: "Davrni tiklash", exact: true }).click();
+if (await page.getByLabel("Sanadan", { exact: true }).inputValue())
+  throw new Error("Dashboard date range did not reset");
 await page.goto(`${baseURL}/quizzes`);
 await page.getByRole("button", { name: "Yangi test", exact: true }).click();
 await page.getByLabel("Test nomi").fill("Brauzer tekshiruvi");
@@ -60,6 +102,8 @@ for (const path of ["/", "/quizzes", "/questions", "/students", "/profile"]) {
 await page.setViewportSize({ width: 390, height: 844 });
 await page.goto(`${baseURL}/`);
 await page.getByRole("heading", { name: "Xush kelibsiz, Interfeys" }).waitFor();
+await page.locator(".stat-grid .stat").first().waitFor();
+await page.getByRole("img", { name: "Kunlik urinishlar grafigi" }).waitFor();
 await page.screenshot({
   path: `${artifactDir}/dashboard-mobile-dark.png`,
   fullPage: true,

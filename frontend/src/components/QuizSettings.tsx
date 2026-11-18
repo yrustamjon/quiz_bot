@@ -195,12 +195,8 @@ export function QuizSettings({
                 : !key.startsWith("shuffle"),
             )
             .map(([key, label]) => (
-              <label
-                style={{ display: "flex", alignItems: "center", gap: 10 }}
-                key={key}
-              >
+              <label className="setting-toggle" key={key}>
                 <input
-                  style={{ width: 20, minHeight: 20 }}
                   type="checkbox"
                   checked={!!values[key]}
                   onChange={(e) =>
